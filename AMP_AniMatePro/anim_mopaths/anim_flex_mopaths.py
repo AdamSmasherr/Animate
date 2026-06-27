@@ -12,6 +12,7 @@ from bpy.props import (
     EnumProperty,
 )
 from bpy.types import Operator, Panel, PropertyGroup, UIList
+from bpy.app.handlers import persistent
 from ..utils.customIcons import get_icon
 
 is_updating_visibility = False
@@ -311,8 +312,25 @@ def ensure_motion_paths_handler():
         is_updating_motion_paths = False
 
 
+_ensure_paths_scheduled = False
+_refresh_paths_scheduled = False
+
+
 def ensure_motion_paths(self, context):
-    props = bpy.context.scene.mp_props
+    global _ensure_paths_scheduled
+    if not _ensure_paths_scheduled:
+        _ensure_paths_scheduled = True
+        bpy.app.timers.register(_deferred_ensure_motion_paths, first_interval=0.0)
+
+
+def _deferred_ensure_motion_paths():
+    global _ensure_paths_scheduled
+    _ensure_paths_scheduled = False
+
+    scene = getattr(bpy.context, "scene", None)
+    props = getattr(scene, "mp_props", None) if scene else None
+    if props is None:
+        return None
 
     was_locked = unlock_object_mode()
     mode, sel_objs, active_obj, sel_bones, active_bone = store_selection_and_mode(bpy.context)
@@ -354,11 +372,29 @@ def ensure_motion_paths(self, context):
     restore_selection_and_mode(bpy.context, mode, sel_objs, active_obj, sel_bones, active_bone)
 
     lock_object_mode(was_locked)
+    return None
 
 
 def refresh_all_motion_paths(self, context):
-    update_visibility(context)
-    bpy.ops.object.paths_update_visible()
+    global _refresh_paths_scheduled
+    if not _refresh_paths_scheduled:
+        _refresh_paths_scheduled = True
+        bpy.app.timers.register(_deferred_refresh_motion_paths, first_interval=0.0)
+
+
+def _deferred_refresh_motion_paths():
+    global _refresh_paths_scheduled
+    _refresh_paths_scheduled = False
+    scene = getattr(bpy.context, "scene", None)
+    props = getattr(scene, "mp_props", None) if scene else None
+    if props is None:
+        return None
+    update_visibility(bpy.context)
+    try:
+        bpy.ops.object.paths_update_visible()
+    except RuntimeError:
+        pass
+    return None
 
 
 def get_active_element(context):
@@ -423,11 +459,16 @@ _is_mutating_internally = False
 def deferred_flex_mopaths_update():
     global _flex_mopaths_update_scheduled, last_active_item, _is_mutating_internally
     _flex_mopaths_update_scheduled = False
-    
+
+    scene = getattr(bpy.context, "scene", None)
+    mp_props = getattr(scene, "mp_props", None) if scene else None
+    if mp_props is None:
+        return None
+
     _is_mutating_internally = True
     try:
         # Complete Name Synchronization
-        for elem in bpy.context.scene.mp_props.elements:
+        for elem in mp_props.elements:
             if elem.item_type == "OBJECT":
                 try:
                     if not elem.object_ref:
@@ -462,7 +503,7 @@ def deferred_flex_mopaths_update():
                 except ReferenceError:
                     pass
 
-        if not bpy.context.scene.mp_props.show_motion_paths:
+        if not mp_props.show_motion_paths:
             return None
         current_active_elem = get_active_element(bpy.context)
         current_active_name = current_active_elem.name if current_active_elem else None
@@ -479,8 +520,11 @@ def depsgraph_update_handler(scene):
     global last_active_item, _flex_mopaths_update_scheduled, _is_mutating_internally
     if _is_mutating_internally:
         return
+    mp_props = getattr(scene, "mp_props", None)
+    if mp_props is None:
+        return
     # only update if show paths is active
-    if not bpy.context.scene.mp_props.show_motion_paths:
+    if not mp_props.show_motion_paths:
         return
     if not _flex_mopaths_update_scheduled:
         _flex_mopaths_update_scheduled = True
@@ -492,6 +536,14 @@ def update_handler_registration(show):
         bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_handler)
     elif not show and depsgraph_update_handler in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_handler)
+
+
+@persistent
+def _flex_mopaths_load_post(*args):
+    scene = getattr(bpy.context, "scene", None)
+    mp_props = getattr(scene, "mp_props", None) if scene else None
+    if mp_props is not None:
+        update_handler_registration(mp_props.show_motion_paths)
 
 
 class AMP_FMP_PG_Element(PropertyGroup):
@@ -1126,8 +1178,14 @@ def register():
         bpy.utils.register_class(cls)
     bpy.types.Scene.mp_props = PointerProperty(type=AMP_FMP_PG_Properties)
 
-    if bpy.context.scene.mp_props.show_motion_paths:
-        bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_handler)
+    scene = getattr(bpy.context, "scene", None)
+    mp_props = getattr(scene, "mp_props", None) if scene else None
+    if mp_props is not None and mp_props.show_motion_paths:
+        if depsgraph_update_handler not in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_handler)
+
+    if _flex_mopaths_load_post not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_flex_mopaths_load_post)
 
 
 def unregister():
@@ -1137,6 +1195,20 @@ def unregister():
 
     if depsgraph_update_handler in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_handler)
+
+    if _flex_mopaths_load_post in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_flex_mopaths_load_post)
+
+    for timer_fn in (
+        deferred_flex_mopaths_update,
+        _deferred_ensure_motion_paths,
+        _deferred_refresh_motion_paths,
+    ):
+        try:
+            if bpy.app.timers.is_registered(timer_fn):
+                bpy.app.timers.unregister(timer_fn)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

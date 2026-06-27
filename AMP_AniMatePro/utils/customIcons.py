@@ -86,7 +86,7 @@ def get_icon(icon_name):
     if isinstance(icon_name, int):
         return {"icon_value": icon_name}
 
-    if isinstance(icon_name, str) and icon_name in custom_icons:
+    if isinstance(icon_name, str) and custom_icons is not None and icon_name in custom_icons:
         return {"icon_value": custom_icons[icon_name].icon_id}
 
     if (

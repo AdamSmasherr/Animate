@@ -189,12 +189,8 @@ def remove_fcurve(action, fcurve):
 def iter_grease_pencil_layers(obj):
     if not is_grease_pencil_object(obj):
         return
-    if has_grease_pencil_v3():
-        if hasattr(obj.data, "layers"):
-            yield from obj.data.layers
-    else:
-        if hasattr(obj.data, "layers"):
-            yield from obj.data.layers
+    if hasattr(obj.data, "layers"):
+        yield from obj.data.layers
 
 def iter_grease_pencil_frames(obj_or_scene):
     if hasattr(obj_or_scene, "objects"):

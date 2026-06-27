@@ -144,12 +144,19 @@ if using source interpolation and handles""",
     frame_range = []
     baked_fcurves = []
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None
+
     def invoke(self, context, event):
         wm = context.window_manager
         return wm.invoke_props_dialog(self, width=400)
 
     def execute(self, context):
         ob = context.active_object
+        if ob is None:
+            self.report({"WARNING"}, "No active object")
+            return {"CANCELLED"}
         if ob.animation_data is None or ob.animation_data.action is None or ob.animation_data.nla_tracks is None:
             self.report({"WARNING"}, "No animation data found")
             return {"CANCELLED"}
@@ -162,7 +169,6 @@ if using source interpolation and handles""",
         # store all the information
         if self.bake_type == "SMART":
             self.original_data = self.store_original_data(self.original_fcurves)
-            print(self.original_data)
 
         # Using Blender's NLA bake operator
         self.bake_action(context, self.frame_range)
@@ -373,7 +379,7 @@ if using source interpolation and handles""",
         if obj.animation_data:
             # Clear all NLA tracks using a loop
             tracks = obj.animation_data.nla_tracks
-            for track in tracks:
+            for track in list(tracks):
                 tracks.remove(track)
         else:
             print("No animation data found on the object.")

@@ -476,7 +476,10 @@ class AMP_OT_bake_to_rotation_mode(bpy.types.Operator):
                         self.report({"INFO"}, f"Keyed rotation_mode for object '{obj.name}' at frame {first_frame}.")
 
         context.scene.frame_set(original_frame)  # <-- Restore original frame
-        bpy.ops.graph.euler_filter()  # <-- Apply Euler filter to the baked animation
+        try:
+            bpy.ops.graph.euler_filter()  # <-- Apply Euler filter to the baked animation
+        except RuntimeError:
+            pass
         self.report({"INFO"}, f"Baked animation to '{new_rotation_mode}' rotation mode.")
         return {"FINISHED"}
 

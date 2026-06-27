@@ -27,24 +27,6 @@ icon_map = {
 }
 
 
-def get_unique_set_name(coll, new_name, exclude_set=None):
-    base_name = re.sub(r"\.\d{3}$", "", new_name)
-    existing_indices = set()
-    for s in coll:
-        if s is exclude_set:
-            continue
-        if s.name == base_name:
-            existing_indices.add(0)
-        else:
-            m = re.match(re.escape(base_name) + r"\.(\d{3})$", s.name)
-            if m:
-                existing_indices.add(int(m.group(1)))
-    i = 1
-    while i in existing_indices:
-        i += 1
-    return base_name if 0 not in existing_indices else f"{base_name}.{i:03d}"
-
-
 class AMP_PG_AnimSetElement(PropertyGroup):
     object_ref: PointerProperty(type=bpy.types.Object)
     bone_name: StringProperty()
@@ -950,6 +932,8 @@ class AMP_OT_AnimSetMoveElement(Operator):
         if scene_props.active_preset_index < 0 or scene_props.active_preset_index >= len(scene_props.presets):
             return {"CANCELLED"}
         preset = scene_props.presets[scene_props.active_preset_index]
+        if not (0 <= self.set_index < len(preset.sets)):
+            return {"CANCELLED"}
         target = preset.sets[self.set_index]
         self.set_uid = target.uid
         scene_props.active_move_set_index = self.set_index
@@ -1235,11 +1219,6 @@ def view3d_draw_handler(dummy, context):
         fn()
 
 
-def view3d_event_handler(context, event):
-    for fn in event_handlers:
-        fn(context, event)
-
-
 classes = (
     AMP_PG_AnimSetElement,
     AMP_PG_AnimSet,
@@ -1268,23 +1247,39 @@ classes = (
 )
 
 
+_draw_handle = None
+
+
+def _deferred_modal_start():
+    try:
+        bpy.ops.anim.amp_modal_event_handler("INVOKE_DEFAULT")
+    except Exception:
+        pass
+    return None
+
+
 def register():
+    global _draw_handle
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.amp_anim_set = PointerProperty(type=AMP_PG_SceneAnimSets)
-    bpy.types.SpaceView3D.draw_handler_add(view3d_draw_handler, (None, None), "WINDOW", "POST_PIXEL")
-    bpy.ops.anim.amp_modal_event_handler("INVOKE_DEFAULT")
-    bpy.context.scene.amp_anim_set.display_gui = False
+    _draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+        view3d_draw_handler, (None, None), "WINDOW", "POST_PIXEL"
+    )
+    if not bpy.app.background:
+        bpy.app.timers.register(_deferred_modal_start, first_interval=0.0)
 
 
 def unregister():
+    global _draw_handle
     if gui_state["show_pinned_gui"]:
         gui_state["show_pinned_gui"] = False
+    if _draw_handle is not None:
+        bpy.types.SpaceView3D.draw_handler_remove(_draw_handle, "WINDOW")
+        _draw_handle = None
     del bpy.types.Scene.amp_anim_set
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    bpy.types.SpaceView3D.draw_handler_remove(view3d_draw_handler, "WINDOW")
-    bpy.ops.anim.amp_modal_event_handler("CANCELLED")
 
 
 if __name__ == "__main__":

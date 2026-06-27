@@ -85,6 +85,10 @@ class AMP_OT_CaptureKeyInput(bpy.types.Operator):
         default=True,
     )
 
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None
+
     @staticmethod
     def update_ui():
         for window in bpy.context.window_manager.windows:
@@ -104,7 +108,8 @@ class AMP_OT_CaptureKeyInput(bpy.types.Operator):
                 {"INFO"},
                 f"Key for {self.action_id.replace('_', ' ').title()} reset to default",
             )
-            context.area.header_text_set(None)  # Clear the header text
+            if context.area:
+                context.area.header_text_set(None)  # Clear the header text
             self.update_ui()
             return {"FINISHED"}
 
@@ -137,12 +142,14 @@ class AMP_OT_CaptureKeyInput(bpy.types.Operator):
                     {"INFO"},
                     f"Key set to {key_identifier} for {self.action_id.replace('_', ' ').title()}",
                 )
-                context.area.header_text_set(None)  # Clear the header text
+                if context.area:
+                    context.area.header_text_set(None)  # Clear the header text
                 self.finish_capture(context)
                 self.update_ui()
                 return {"FINISHED"}
 
-        context.area.header_text_set("Press a key (ESC or BACKSPACE to cancel)")
+        if context.area:
+            context.area.header_text_set("Press a key (ESC or BACKSPACE to cancel)")
         return {"RUNNING_MODAL"}
 
     def invoke(self, context, event):
@@ -150,7 +157,8 @@ class AMP_OT_CaptureKeyInput(bpy.types.Operator):
         prefs.capturing_key = self.action_id
         wm = context.window_manager
         wm.modal_handler_add(self)
-        context.area.header_text_set("Press a key (ESC or BACKSPACE to cancel)")
+        if context.area:
+            context.area.header_text_set("Press a key (ESC or BACKSPACE to cancel)")
         return {"RUNNING_MODAL"}
 
     def finish_capture(self, context):
@@ -161,7 +169,8 @@ class AMP_OT_CaptureKeyInput(bpy.types.Operator):
     def cancel(self, context):
         prefs = bpy.context.preferences.addons[base_package].preferences
         prefs.capturing_key = ""
-        context.area.header_text_set(None)  # Clear the header text
+        if context.area:
+            context.area.header_text_set(None)  # Clear the header text
         self.update_ui()
 
 

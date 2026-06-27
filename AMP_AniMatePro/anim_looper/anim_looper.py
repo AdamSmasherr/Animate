@@ -335,7 +335,7 @@ def register():
         for cls in classes:
             bpy.utils.register_class(cls)
     except:
-        utils.dutils.dprint(f"{cls} already registered, skipping...")
+        utils.dprint(f"{cls} already registered, skipping...")
 
 
 def unregister():
@@ -343,7 +343,7 @@ def unregister():
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)
     except:
-        utils.dutils.dprint(f"{cls} not found, skipping...")
+        utils.dprint(f"{cls} not found, skipping...")
     unregister_properties()
 
 

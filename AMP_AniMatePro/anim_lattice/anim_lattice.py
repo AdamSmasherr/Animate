@@ -6,7 +6,7 @@ from gpu_extras.batch import batch_for_shader
 import math
 from math import radians
 import numpy as np
-from ..utils.curve import is_fcurve_in_radians, get_nla_strip_offset
+from ..utils.curve import is_fcurve_in_radians
 from ..utils import ensure_alpha, refresh_ui
 from ..utils.customIcons import get_icon
 from .. import __package__ as base_package
@@ -213,10 +213,11 @@ Hold Shift to launch with the options panel."""
 
     _handle = None
     _is_running = False
+    _active_instance = None
 
     @classmethod
     def poll(cls, context):
-        return context.area.type == "GRAPH_EDITOR"  # and not context.space_data.use_normalization
+        return context.area is not None and context.area.type == "GRAPH_EDITOR"  # and not context.space_data.use_normalization
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -554,7 +555,7 @@ Hold Shift to launch with the options panel."""
 
     def modal(self, context, event):
         if not self._is_running:
-            return {"CANCELLED"}
+            return self.cancel(context)
 
         props = bpy.context.scene.keyframe_lattice_settings
         current_mode = props.mode
@@ -758,9 +759,13 @@ Hold Shift to launch with the options panel."""
                 return {"CANCELLED"}
             context.window_manager.modal_handler_add(self)
             self.__class__._is_running = True
+            self.__class__._active_instance = self
             return {"RUNNING_MODAL"}
         else:
             # Operator is already running, cancel it
+            active = self.__class__._active_instance
+            if active is not None and active is not self:
+                return active.cancel(context)
             return self.cancel(context)
 
     def cancel(self, context):
@@ -768,6 +773,7 @@ Hold Shift to launch with the options panel."""
             context.space_data.use_normalization = True
 
         self.__class__._is_running = False
+        self.__class__._active_instance = None
         if self._handle is not None:
             try:
                 bpy.types.SpaceGraphEditor.draw_handler_remove(self._handle, "WINDOW")
@@ -1211,43 +1217,6 @@ Hold Shift to launch with the options panel."""
             for cp in self.control_points:
                 if cp.index != self.dragging_control_point:
                     cp.position = positions.get(cp.index, cp.position)
-
-    class AMP_PT_AnimLatticeOptions(bpy.types.Panel):
-        bl_label = ""
-        bl_idname = "AMP_PT_AnimLatticeOptions"
-        bl_space_type = "VIEW_3D"
-        bl_region_type = "WINDOW"
-        bl_context = ""
-        bl_ui_units_x = 20
-
-        def draw(self, context):
-            layout = self.layout
-            props = context.scene.keyframe_lattice_settings
-
-            layout.use_property_split = True
-            layout.use_property_decorate = False
-
-            layout.label(text="Anim Lattice Options", icon="MOD_LATTICE")
-
-            ui_column = layout.column()
-            ui_column.separator(factor=2)
-
-            box = ui_column.box()
-            container = box.column(align=False)
-
-            container.prop(props, "snap_lattice_to_full_frames", text="Snap to full frames")
-            container.prop(props, "display_values", text="Display values")
-
-            container.separator()
-
-            mode_container = container.column()
-            mode_container.prop(props, "mode", text="Mode")
-
-            lattice_container = container.column()
-            lattice_container.active = True if props.mode == "WARP" else False
-            lattice_container.prop(props, "lock_direction", text="Lock Direction")
-            lattice_container.prop(props, "lattice_x", text="Lattice X")
-            lattice_container.prop(props, "lattice_y", text="Lattice Y")
 
 
 class AMP_PG_AnimLatticeSettings(bpy.types.PropertyGroup):

@@ -38,54 +38,6 @@ from bpy.props import (
 from bpy.types import Operator
 
 
-# class AMP_OT_modal_test(Operator):
-#     """Slider Operators Preset"""
-
-#     bl_idname = "anim.amp_modal_test"
-#     bl_label = "Test"
-
-#     @classmethod
-#     def poll(cls, context):
-#         return True
-
-#     def modal(self, context, event):
-#         # utils.dprint('EVENT TYPE: ', event.type)
-#         # utils.dprint('EVENT VALUE: ', event.value)
-
-#         if event.type == "LEFTMOUSE":
-#             if event.value == "PRESS":
-#                 self.leftmouse = True
-#             elif event.value == "RELEASE":
-#                 self.leftmouse = False
-#             utils.dprint("LEFTMOUSE")
-
-#         if event.type == "MOUSEMOVE":
-#             utils.dprint("LEFTMOUSE: ", self.leftmouse)
-#             utils.dprint("MOUSEMOVE")
-
-#             if self.leftmouse:
-#                 utils.dprint("leftmouse")
-
-#             if event.shift and self.leftmouse:
-#                 utils.dprint("shift")
-
-#             elif event.alt and self.leftmouse:
-#                 utils.dprint("alt")
-
-#             elif event.ctrl and self.leftmouse:
-#                 utils.dprint("ctrl")
-
-#         elif event.type in {"RIGHTMOUSE", "ESC"}:
-#             return {"CANCELLED"}
-
-#         return {"RUNNING_MODAL"}
-
-#     def invoke(self, context, event):
-#         self.leftmouse = False
-#         context.window_manager.modal_handler_add(self)
-#         return {"RUNNING_MODAL"}
-
-
 class AMP_OT_activate_anim_offset(Operator):
     """Activates Anim Offset without masks"""
 
@@ -114,7 +66,8 @@ class AMP_OT_activate_anim_offset(Operator):
             utils.amp_draw_header_handler(action="ADD")
             utils.add_message(self.message)
 
-        context.area.tag_redraw()
+        if context.area:
+            context.area.tag_redraw()
         # bpy.ops.wm.redraw_timer()
         bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
         # bpy.data.window_managers['WinMan'].windows.update()
@@ -159,8 +112,10 @@ class AMP_OT_deactivate_anim_offset(Operator):
             anim_offset.quick_anim_offset_in_use = False
 
         # bpy.ops.wm.redraw_timer()
-        for area in bpy.context.screen.areas:
-            area.tag_redraw()
+        screen = bpy.context.screen
+        if screen:
+            for area in screen.areas:
+                area.tag_redraw()
         # context.area.tag_redraw()
         bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
         # bpy.data.window_managers['WinMan'].windows.update()

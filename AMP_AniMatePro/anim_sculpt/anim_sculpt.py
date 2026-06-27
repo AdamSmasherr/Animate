@@ -19,41 +19,6 @@ from .. import utils
 from .. import __package__ as base_package
 
 
-# Define the draw_box_2d function for drawing boxes in the Graph Editor
-def draw_box_on_cursor(context, position, color=(1, 1, 1, 0.1)):
-    settings = context.scene.keyframe_sculpt_settings
-
-    # Step 1: Convert mouse position from screen to graph space to find the center of the box
-    graph_x, graph_y = screen_to_graph(context, *position)
-
-    # Step 2: Calculate scale factors for the graph editor
-    scale_x, scale_y = get_scale_factors(context)
-
-    # Define the target size in graph space, adjusting by scale factors to ensure it matches the intended screen space size
-    target_graph_size_x = settings.radius * 2 * scale_x
-    target_graph_size_y = settings.radius * 2 * scale_y
-
-    # Step 3: Calculate the vertices of the box in graph space, using the adjusted graph space size
-    graph_vertices = [
-        (graph_x - target_graph_size_x / 2, graph_y - target_graph_size_y / 2),
-        (graph_x + target_graph_size_x / 2, graph_y - target_graph_size_y / 2),
-        (graph_x + target_graph_size_x / 2, graph_y + target_graph_size_y / 2),
-        (graph_x - target_graph_size_x / 2, graph_y + target_graph_size_y / 2),
-    ]
-
-    # Step 4: Convert the vertices from graph space back to screen space for drawing
-    screen_vertices = [graph_to_screen(context, *vert) for vert in graph_vertices]
-
-    # Draw the box using the calculated screen space vertices
-    gpu.state.blend_set("ALPHA")
-    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
-    batch = batch_for_shader(shader, "TRI_FAN", {"pos": screen_vertices})
-    shader.bind()
-    shader.uniform_float("color", color)
-    batch.draw(shader)
-    gpu.state.blend_set("NONE")
-
-
 def screen_to_graph(context, screen_x, screen_y):
     region = context.region
     view2d = region.view2d
@@ -80,28 +45,6 @@ def get_scale_factors(context):
     scale_x = view_width_units / region.width
     scale_y = view_height_units / region.height
     return scale_x, scale_y
-
-
-# Define the draw_box_2d function for drawing boxes in the Graph Editor
-def draw_box_on_screen(context, graph_position, color=(1, 1, 1, 0.1)):
-    settings = context.scene.keyframe_sculpt_settings
-    width = height = settings.radius
-    # Convert graph coordinates to screen coordinates
-    screen_x, screen_y = graph_to_screen(context, *graph_position)
-
-    # Adjust for the provided width and height
-    vertices = [
-        (screen_x - width, screen_y - height),
-        (screen_x + width, screen_y - height),
-        (screen_x + width, screen_y + height),
-        (screen_x - width, screen_y + height),
-    ]
-
-    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
-    batch = batch_for_shader(shader, "TRI_FAN", {"pos": vertices})
-    shader.bind()
-    shader.uniform_float("color", color)
-    batch.draw(shader)
 
 
 def draw_text_bottom_center(context, text):
@@ -284,6 +227,7 @@ def anim_sculpt_brush(
 
         # Proceed only with masked keyframes
         keyframes_masked = [keyframe for keyframe, m in zip(keyframes, mask) if m]
+        masked_indices = np.nonzero(mask)[0]
         keyframe_times_masked = keyframe_times[mask]
         keyframe_values_masked = keyframe_values[mask]
 
@@ -318,6 +262,7 @@ def anim_sculpt_brush(
         if len(indices) > 0:
             # Prepare data for brush_mode_function
             keyframes_influenced = [keyframes_masked[i] for i in indices]
+            influenced_indices = [int(masked_indices[i]) for i in indices]
             influence_values = influence[indices]
 
             for idx, (keyframe, influence_value) in enumerate(zip(keyframes_influenced, influence_values)):
@@ -334,6 +279,7 @@ def anim_sculpt_brush(
                     selected_keyframes,
                     selected_final_avg_value,
                     neighbours_distances,
+                    kf_index=influenced_indices[idx],
                 )
 
         fcurve.update()
@@ -353,6 +299,7 @@ def anim_sculpt_brush_tweak(
     selected_keyframes,
     selected_avg_value,
     neighbours_values,
+    kf_index=None,
 ):
     settings = context.scene.keyframe_sculpt_settings
     # Apply movement based on influence
@@ -361,50 +308,6 @@ def anim_sculpt_brush_tweak(
             keyframe.co_ui[0] += delta_x * influence * strength
         if settings.keyframes_sculpt_lock_mode != "LOCK_VALUES":
             keyframe.co_ui[1] += delta_y * influence * strength * d2r_conversion
-
-
-# def anim_sculpt_brush_smooth(
-#     context,
-#     influence,
-#     delta_x,
-#     delta_y,
-#     keyframe,
-#     d2r_conversion,
-#     strength,
-#     fcurve,
-#     fcurves,
-#     selected_keyframes,
-#     selected_avg_value,
-#     neighbours_distances,
-# ):
-#     settings = context.scene.keyframe_sculpt_settings
-#     str_multiplier = settings.smoothing_multiplier
-
-#     if influence <= 0:
-#         return  # Skip keyframes outside the brush influence
-
-#     keyframes = fcurve.keyframe_points
-#     num_keyframes = len(keyframes)
-#     index = keyframes[:].index(keyframe)
-
-#     # Dynamically calculate Y value for smoothing using cached distances
-#     if 0 < index < num_keyframes - 1 and fcurve in neighbours_distances:
-#         prev_kf = keyframes[index - 1]
-#         next_kf = keyframes[index + 1]
-
-#         weighted_avg_value = (prev_kf.co[1] + next_kf.co[1]) / 2.0
-
-#         decay_factor = 0.01
-#         total_distance = neighbours_distances[fcurve][index]
-
-#         # Apply exponential decay based on total_distance
-#         decay = math.exp(-decay_factor * total_distance)
-
-#         # Apply the decay to reduce the adjustment
-#         adjustment = influence * strength * decay * (weighted_avg_value - keyframe.co[1]) * str_multiplier
-
-#         # Apply the adjustment
-#         keyframe.co_ui[1] += adjustment
 
 
 def anim_sculpt_brush_smooth(
@@ -420,6 +323,7 @@ def anim_sculpt_brush_smooth(
     selected_keyframes,
     selected_avg_value,
     neighbours_distances,
+    kf_index=None,
 ):
     settings = context.scene.keyframe_sculpt_settings
     str_multiplier = settings.smoothing_multiplier * 0.7
@@ -429,7 +333,10 @@ def anim_sculpt_brush_smooth(
 
     keyframes = fcurve.keyframe_points
     num_keyframes = len(keyframes)
-    index = keyframes[:].index(keyframe)
+    if kf_index is not None:
+        index = kf_index
+    else:
+        index = keyframes[:].index(keyframe)
 
     if 0 < index < num_keyframes - 1:
         prev_kf = keyframes[index - 1]
@@ -489,6 +396,7 @@ def anim_brush_brush_average(
     selected_keyframes,
     selected_avg_value,
     neighbours_values,
+    kf_index=None,
 ):
     """Apply averaging to keyframes, considering unit conversion for rotation curves."""
 
@@ -601,7 +509,7 @@ class AMP_OT_anim_sculpt(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.area.type == "GRAPH_EDITOR"
+        return context.area is not None and context.area.type == "GRAPH_EDITOR"
 
     def draw(self, context):
         layout = self.layout
@@ -674,8 +582,6 @@ class AMP_OT_anim_sculpt(bpy.types.Operator):
         # Drawing mode description at the bottom center
         if self.mode == "SMOOTH":
             current_mode = "Smoothing"
-        elif self.mode == "SMOOTH_MACRO":
-            current_mode = "Macro Smoothing"
         elif self.mode == "AVERAGE":
             current_mode = "Average Smoothing"
         else:
@@ -697,14 +603,6 @@ class AMP_OT_anim_sculpt(bpy.types.Operator):
             self._display_text(self.text_to_show, central_position)
 
         gpu.state.blend_set("NONE")
-
-    # def calculate_delta(self, current_mouse_x, current_mouse_y):
-    #     # Calculate delta since last adjustment
-    #     delta = current_mouse_x - self.last_adjust_mouse_x
-    #     # Update last adjustment positions
-    #     self.last_adjust_mouse_x = current_mouse_x
-    #     self.last_adjust_mouse_y = current_mouse_y
-    #     return delta
 
     def calculate_delta(self, current_mouse_x, current_mouse_y):
         delta = current_mouse_x - self.initial_mouse_x
@@ -951,9 +849,11 @@ class AMP_OT_anim_sculpt(bpy.types.Operator):
         self.initial_use_normalization = False
         self.initial_view_settings = {}
 
-        self.initial_use_normalization = context.space_data.use_normalization
-        if self.initial_use_normalization:
-            context.space_data.use_normalization = False
+        sd = context.space_data
+        if hasattr(sd, "use_normalization"):
+            self.initial_use_normalization = sd.use_normalization
+            if self.initial_use_normalization:
+                sd.use_normalization = False
 
         if self.cancel_sculpt:
             if wm.anim_sculpt_running:
@@ -1022,7 +922,7 @@ class AMP_OT_anim_sculpt(bpy.types.Operator):
     def cancel(self, context):
         settings = context.scene.keyframe_sculpt_settings
 
-        if self.initial_use_normalization:
+        if self.initial_use_normalization and hasattr(context.space_data, "use_normalization"):
             context.space_data.use_normalization = True
 
         wm = context.window_manager

@@ -79,7 +79,7 @@ changelog = {
 - Safely restored keymaps and modal operators with full crash-resilience.
 
 """,
-    "0.25.10318": """
+    "0.25.10319": """
 **KEYTYPE_KEYFRAME_VEC** Highlights
 —————————————————
 - Initial implementation for support for 4.4 slotted actions and backwards compatibility.
@@ -486,7 +486,7 @@ New features:
 
 import re
 import textwrap
-from .utils.customIcons import get_icon_id, get_icon
+from .utils.customIcons import get_icon_id
 
 panels_visibility = {}
 

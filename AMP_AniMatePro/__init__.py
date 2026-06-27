@@ -68,7 +68,7 @@ from bpy.props import (
     StringProperty,
 )
 from bpy.types import AddonPreferences, PropertyGroup, Operator, Scene
-from bpy.app.handlers import persistent, depsgraph_update_post, load_post, load_pre
+from bpy.app.handlers import load_post
 from bpy.utils import register_class, unregister_class
 from . import (
     utils,
@@ -98,7 +98,6 @@ from . import (
     anim_selection_sets,
     anim_experimental,
     register_keymaps,
-    anim_overlap,
     anim_time_visualizer,
     anim_onionskin,
 )
@@ -185,7 +184,13 @@ def unregister():
     unregister_class(TIMELINE_scene_properties)
     
 
-    if hasattr(anim_experimental, "unregister"):
+    try:
+        prefs = bpy.context.preferences.addons[base_package].preferences
+        experimental = prefs.experimental
+    except (KeyError, AttributeError):
+        experimental = False
+
+    if experimental and hasattr(anim_experimental, "unregister"):
         anim_experimental.unregister()
 
     for module in reversed(addon_modules):

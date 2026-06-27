@@ -316,6 +316,6 @@ def unregister():
     for keymap in addon_keymaps:
         try:
             keymap.unregister()
-        except AttributeError as e:
+        except Exception as e:
             print(f"Error unregistering keymap {keymap}: {e}")
             pass

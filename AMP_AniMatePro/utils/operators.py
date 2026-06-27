@@ -161,11 +161,11 @@ def register():
 
 
 def unregister():
-    try:
-        for cls in reversed(classes):
+    for cls in reversed(classes):
+        try:
             bpy.utils.unregister_class(cls)
-    except RuntimeError or AttributeError:
-        utils.dprint("Class not found, skiping...")
+        except (RuntimeError, AttributeError):
+            utils.dprint("Class not found, skiping...")
 
 
 ##################

@@ -94,8 +94,14 @@ def find_addon_keyconfig(operator_idname, keymaps_to_register, space_type, regio
 def find_user_keyconfig(key):
     """Find a specific keymap item in the user key configurations."""
     # Function to find user keyconfig
-    km, kmi = addon_keymaps[key]
-    for item in bpy.context.window_manager.keyconfigs.user.keymaps[km.name].keymap_items:
+    entry = addon_keymaps.get(key)
+    if entry is None:
+        return None
+    km, kmi = entry
+    user_km = bpy.context.window_manager.keyconfigs.user.keymaps.get(km.name)
+    if user_km is None:
+        return kmi
+    for item in user_km.keymap_items:
         found_item = False
         if kmi.idname == item.idname:
             found_item = True
@@ -112,49 +118,6 @@ def find_user_keyconfig(key):
     return kmi
 
 
-# def find_user_keyconfig(
-#     operator_idname,
-#     keymaps_to_register,
-#     keymap_type,
-#     keymap_event_value,
-#     keymap_direction=None,
-# ):
-#     """
-#     Find a specific keymap item in the user key configurations based on operator_idname and additional criteria.
-
-#     Args:
-#     - operator_idname (str): The operator ID name used in the keymap item.
-#     - keymaps_to_register (list): The list of keymaps (as dictionaries) to search within.
-#     - keymap_type (str): The type of event (e.g., 'SPACE', 'T', etc.).
-#     - keymap_event_value (str): The value of the event ('PRESS', 'RELEASE').
-#     - keymap_direction (str, optional): The direction of the mouse movement, if applicable.
-
-#     Returns:
-#     - The found keymap item or None if not found.
-#     """
-#     for keymap_dict in keymaps_to_register:
-#         if keymap_dict["operator_idname"] == operator_idname:
-#             # Extract details from the keymap definition
-#             km_name = keymap_dict["name"]
-#             km_space_type = keymap_dict["space_type"]
-#             km_region_type = keymap_dict["region_type"]
-
-#             # Find the keymap in user key configurations
-#             km = bpy.context.window_manager.keyconfigs.user.keymaps.get(km_name, None)
-#             if km:
-#                 for item in km.keymap_items:
-#                     if (
-#                         item.idname == operator_idname
-#                         and item.type == keymap_type
-#                         and item.value == keymap_event_value
-#                         and (keymap_direction is None or item.key_modifier == keymap_direction)
-#                     ):
-#                         # Found the matching keymap item
-#                         return item
-#     # If we get here, the keymap item was not found
-#     return None
-
-
 def find_blender_keyconfig(idname, properties=None):
     """Find a specific keymap item in Blender's key configurations."""
     wm = bpy.context.window_manager
@@ -167,24 +130,6 @@ def find_blender_keyconfig(idname, properties=None):
                 else:
                     return item
     return None
-
-
-# def update_spacebar_action(self, context):
-#     # Map the addon's spacebar action to Blender's enum identifiers
-#     spacebar_action_map = {
-#         "PLAY": "PLAY",
-#         "TOOLBAR": "TOOL",
-#         "SEARCH": "SEARCH",
-#         "NOTHING": "NOTHING",
-#     }
-#     # Get the mapped value for the current preference
-#     mapped_action = spacebar_action_map.get(self.mode_options, "PLAY")  # Default to "PLAY" if not found
-
-#     # Set Blender's spacebar action based on the mapped value
-#     kc = bpy.context.window_manager.keyconfigs.active
-#     if kc and kc.preferences:
-#         kc.preferences.spacebar_action = mapped_action
-#         utils.dprint(f"Spacebar action changed to: {mapped_action}")
 
 
 def ensure_alpha(color_tuple):
@@ -647,47 +592,6 @@ def change_scrub_sensitivity(self, context, event):
         prefs.timeline_sensitivity = max(min_sensitivity, new_sensitivity)
 
 
-# def quick_anim_offset_mask(self, context, event):
-#     scene = context.scene
-#     prefs = context.preferences.addons[base_package].preferences
-#     anim_offset = scene.amp_timeline_tools.anim_offset
-#     prefs = context.preferences.addons[base_package].preferences
-
-#     # Ensure the initial mouse X position is set
-#     if self.initial_mouse_x_offset is None:
-#         self.initial_mouse_x_offset = event.mouse_x
-#         self.acumulate_mask_mover = 0  # Initialize the accumulator for mouse movement
-
-#     current_mouse_x = event.mouse_x
-
-#     # Calculate the difference in mouse X position since the last event
-#     mouse_move_difference = current_mouse_x - self.initial_mouse_x_offset
-
-#     # Accumulate the mouse movement difference
-#     self.acumulate_mask_mover += mouse_move_difference * prefs.timeline_sensitivity
-
-#     # Determine the amount of change based on whether Shift is held (for fine control) or not
-#     if utils.matches_key_combination(event, prefs.quick_anim_offset_blend_key):
-#         # Check if the accumulated movement has reached a threshold for fine control
-#         if abs(self.acumulate_mask_mover) >= 1.0:
-#             blending_change = int(self.acumulate_mask_mover)  # Apply a smaller change
-#             anim_offset.ao_blend_range += blending_change
-#             # Reset the accumulator after applying the change
-#             self.acumulate_mask_mover = 0
-
-#     elif utils.matches_key_combination(event, prefs.quick_anim_offset_mask_key):
-#         # For normal control, check if the accumulated movement has reached a simpler threshold
-#         if abs(self.acumulate_mask_mover) >= 1.0:
-#             mask_change = int(self.acumulate_mask_mover)
-#             anim_offset.ao_mask_range += mask_change
-#             # Reset the accumulator after applying the change
-#             self.acumulate_mask_mover = 0
-
-#     # Update the initial mouse X to the current position for the next event
-#     self.initial_mouse_x_offset = current_mouse_x
-#     self.adjusting_quick_anim_offset = False
-
-
 def quick_anim_offset_mask(self, context, event):
     scene = context.scene
     prefs = context.preferences.addons[base_package].preferences
@@ -801,6 +705,10 @@ def insert_keyframe(self, context, force_insert=False):
 
     # Handle keyframe insertion based on the type of the active object and selection
     objects = context.selected_objects if area_type == "VIEW_3D" else [context.active_object]
+    objects = [obj for obj in objects if obj is not None]
+    if not objects:
+        self.report({"WARNING"}, "No object available to insert keyframes on.")
+        return {"CANCELLED"}
     for obj in objects:
         if obj.type == "ARMATURE" and obj.mode == "POSE":
             for bone in obj.pose.bones:
@@ -819,25 +727,14 @@ def keyframe_curves(self, context, force_insert=False):
         if fcurve.lock or fcurve.hide:
             continue
 
-        if not force_insert:
-            try:
-                fcurve.keyframe_points.insert(
-                    frame=context.scene.frame_current,
-                    value=fcurve.evaluate(context.scene.frame_current),
-                    options={"NEEDED", "FAST"},
-                )
-            except Exception as e:
-                self.report({"WARNING"}, f"Failed to insert keyframe: {str(e)}")
-        else:
-            try:
-                fcurve.keyframe_points.insert(
-                    frame=context.scene.frame_current,
-                    value=fcurve.evaluate(context.scene.frame_current),
-                    options={"NEEDED", "FAST"},
-                )
-            except Exception as e:
-                self.report({"WARNING"}, f"Failed to insert keyframe: {str(e)}")
-    pass
+        try:
+            fcurve.keyframe_points.insert(
+                frame=context.scene.frame_current,
+                value=fcurve.evaluate(context.scene.frame_current),
+                options={"NEEDED", "FAST"},
+            )
+        except Exception as e:
+            self.report({"WARNING"}, f"Failed to insert keyframe: {str(e)}")
 
 
 def keyframe_object(self, obj, frame, insert_options, force_insert):
@@ -945,7 +842,7 @@ def get_all_actions(obj):
 
     shape_keys = {"type": "shape_keys", "action": sk_action}
 
-    if transform or shape_keys:
+    if trans_action or sk_action:
         return [transform, shape_keys]
     else:
         return
@@ -1059,7 +956,7 @@ def poll(context):
 
     selected = get_items(context, any_mode=True)
 
-    area = context.area.type
+    area = getattr(context.area, "type", None)
     return bool((area == "GRAPH_EDITOR" or area == "DOPESHEET_EDITOR" or area == "VIEW_3D") and selected)
 
 
@@ -1075,9 +972,10 @@ def get_items(context, any_mode=False):
     else:
         selected = context.selected_objects
 
-    if context.area.type == "VIEW_3D":
+    if getattr(context.area, "type", None) == "VIEW_3D":
         return selected
-    elif context.space_data.dopesheet.show_only_selected:
+    space_data = context.space_data
+    if space_data is not None and hasattr(space_data, "dopesheet") and space_data.dopesheet.show_only_selected:
         return selected
     else:
         return bpy.data.objects
@@ -1091,38 +989,6 @@ text_handle = None
 # nla_color = None
 
 
-# def set_bar_color():
-#     global bar_color, dopesheet_color, graph_color, nla_color, amp_pref_theme_colors_autosave
-#     if bar_color is None:
-#         bar_color = True
-#         amp_pref_theme_colors_autosave = bpy.context.preferences.use_preferences_save
-#         dopesheet_color = bpy.context.preferences.themes[
-#             0
-#         ].dopesheet_editor.space.header[:]
-#         graph_color = bpy.context.preferences.themes[0].graph_editor.space.header[:]
-#         nla_color = bpy.context.preferences.themes[0].nla_editor.space.header[:]
-
-#     h = bpy.context.preferences.themes[0].graph_editor.preview_range
-#     highlight = (h[0] * 0.9, h[1] * 0.9, h[2] * 0.9, 1)
-#     bpy.context.preferences.use_preferences_save = False
-#     bpy.context.preferences.themes[0].dopesheet_editor.space.header = highlight
-#     bpy.context.preferences.themes[0].nla_editor.space.header = highlight
-#     bpy.context.preferences.themes[0].graph_editor.space.header = highlight
-
-
-# def reset_bar_color():
-#     if amp_pref_theme_colors_autosave is not None:
-#         bpy.context.preferences.use_preferences_save = amp_pref_theme_colors_autosave
-#     if dopesheet_color is not None:
-#         bpy.context.preferences.themes[0].dopesheet_editor.space.header = (
-#             dopesheet_color
-#         )
-#     if graph_color is not None:
-#         bpy.context.preferences.themes[0].nla_editor.space.header = graph_color
-#     if nla_color is not None:
-#         bpy.context.preferences.themes[0].graph_editor.space.header = nla_color
-
-
 def reboot_theme_colors(self, context):
     reset_autokeying_theme_colors()
     # set_bar_color()
@@ -1130,15 +996,14 @@ def reboot_theme_colors(self, context):
 
 
 def set_bar_color():
+    global _was_save_preferences_true
     prefs = bpy.context.preferences.addons[base_package].preferences
     theme = bpy.context.preferences.themes[0]
     autokeying_is_on = bpy.context.scene.tool_settings.use_keyframe_insert_auto
     anim_offset = bpy.context.scene.amp_timeline_tools.anim_offset.mask_in_use
 
-    prefs.original_theme_captured = False
-
     # Capture original theme colors if they haven't been captured yet
-    capture_original_theme_colors(prefs)
+    capture_original_theme_colors()
 
     # Define the highlight color
     h = bpy.context.preferences.themes[0].graph_editor.preview_range
@@ -1210,8 +1075,6 @@ def set_autokeying_theme_colors():
     theme = bpy.context.preferences.themes[0]
     autokeying_is_on = bpy.context.scene.tool_settings.use_keyframe_insert_auto
     anim_offset = bpy.context.scene.amp_timeline_tools.anim_offset.mask_in_use
-
-    prefs.original_theme_captured = False
 
     capture_original_theme_colors()
 
@@ -1312,32 +1175,6 @@ def refresh_ui(context):
             area.tag_redraw()
 
 
-# def matches_key_combination(event, key_combination):
-#     """
-#     Check if the event matches the given key combination.
-#     key_combination is a string like 'CTRL+SHIFT+Z'.
-#     """
-#     components = key_combination.split("+")
-#     main_key = components[-1]  # The main key is always the last component
-#     modifiers = set(components[:-1])  # All but the last component are modifiers
-
-#     # Check if the main key matches
-#     if event.type != main_key or event.value != "PRESS":
-#         return False
-
-#     # Check if the required modifiers are pressed
-#     if "CTRL" in modifiers and not event.ctrl:
-#         return False
-#     if "SHIFT" in modifiers and not event.shift:
-#         return False
-#     if "ALT" in modifiers and not event.alt:
-#         return False
-#     if "OSKEY" in modifiers and not event.oskey:
-#         return False
-
-#     return True
-
-
 def matches_key_combination(event, key_combination, event_type="PRESS"):
     """
     Check if the event matches the given key combination and type (e.g., "PRESS" or "RELEASE").
@@ -1401,7 +1238,9 @@ _draw_handlers = {
 
 def draw_callback(color, coords):
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
-    batch = batch_for_shader(shader, "TRI_FAN", {"pos": coords})
+    # TRI_FAN is unsupported on Vulkan/Metal backends; emulate it with TRIS + explicit fan indices.
+    indices = [(0, i, i + 1) for i in range(1, len(coords) - 1)]
+    batch = batch_for_shader(shader, "TRIS", {"pos": coords}, indices=indices)
     gpu.state.blend_set("ALPHA")
     shader.bind()
     shader.uniform_float("color", color)

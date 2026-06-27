@@ -10,7 +10,7 @@ def start_keyposer(obj):
 
     # Ensure the object uses NLA and has tracks
     anim_data = obj.animation_data
-    if not anim_data or not anim_data.use_nla:
+    if anim_data and not anim_data.use_nla:
         anim_data.use_nla = True
 
     # Ensure no duplicate NLA track names
@@ -39,7 +39,6 @@ def update_keyposer_ui_list(obj, nla_tracks):
                 item = props.nla_tracks.add()
                 item.name = f"{strip.action.name}"
                 item.action_path = f"bpy.data.actions['{strip.action.name}']"
-                item.action_ref = f"action:{strip.action.name}"
                 item.track_name = track.name
                 item.strip_name = strip.name
 
@@ -78,53 +77,6 @@ def update_active_track_index(self, context):
 
             # Call function to refresh the UI list to reflect any changes
             update_keyposer_ui_list(context.active_object, context.active_object.animation_data.nla_tracks)
-
-
-def update_strip_and_action_name(self, context):
-    # `self.name` holds the new name and `self.action_path` holds the old action name for reference
-    if "['" in self.action_path and "']" in self.action_path:
-        old_action_name = self.action_path.split("['")[1].split("']")[0]
-        new_name = self.name
-
-        # if context.scene.is_nla_tweakmode:
-        #     tweak_mode_nla_strip(context, obj, enter=False)
-
-        # Find the action and rename it
-        action = bpy.data.actions.get(old_action_name)
-        if action:
-            action.name = new_name
-            # After renaming, the actual new name might differ if Blender added a suffix
-            actual_new_name = action.name
-
-            # Now, find the corresponding strip in all NLA tracks and update the name
-            for obj in bpy.data.objects:
-                # if obj.animation_data and obj.animation_data.nla_tracks:
-                if obj.animation_data and obj.animation_data.nla_tracks and len(obj.animation_data.nla_tracks) > 0:
-                    for track in obj.animation_data.nla_tracks:
-                        for strip in track.strips:
-                            if strip.action == action:
-                                strip.name = actual_new_name  # Update strip name to match the action's actual new name
-                                # Update 'action_path' and 'name' properties to reflect the actual new name
-                                self.action_path = f"bpy.data.actions['{actual_new_name}']"
-                                self.name = actual_new_name
-                                break
-
-
-def update_nla_strip_properties(self, context):
-    # Split the action path to get the action name
-    action_name = self.action_path.split("['")[1].split("']")[0]
-
-    if context.active_object.animation_data and len(context.active_object.animation_data.nla_tracks) > 0:
-        # Locate the corresponding NLA strip
-        for track in context.active_object.animation_data.nla_tracks:
-            for strip in track.strips:
-                if strip.action and strip.action.name == action_name:
-                    # Update strip properties
-                    strip.blend_type = self.blend_type
-                    strip.extrapolation = self.extrapolation
-                    strip.influence = self.influence
-                    # update_keyposer_ui_list(context.active_object, context.active_object.animation_data.nla_tracks)
-                    break
 
 
 def anim_data_type(obj):
@@ -298,45 +250,6 @@ def cleanup_after_deactivation(obj):
         print("All NLA tracks for the object have been deleted.")
 
 
-def insert_keyposer_keyframes(self, obj, context, key_types):
-    frame_start = context.scene.frame_start
-    frame_end = context.scene.frame_end
-    frames = [frame_start, frame_end]
-
-    print(frames)
-
-    def insert_keyframe_for_bone(bone, frame, key_types):
-        if key_types.get("loc", False):
-            bone.keyframe_insert(data_path="location", frame=frame)
-        if key_types.get("rot", False):
-            # Determine the correct rotation data path based on the bone's rotation mode
-            rotation_data_path = "rotation_euler"
-            if bone.rotation_mode == "QUATERNION":
-                rotation_data_path = "rotation_quaternion"
-            elif bone.rotation_mode == "AXIS_ANGLE":
-                rotation_data_path = "rotation_axis_angle"
-            bone.keyframe_insert(data_path=rotation_data_path, frame=frame)
-        if key_types.get("scale", False):
-            bone.keyframe_insert(data_path="scale", frame=frame)
-
-    if obj.type == "ARMATURE" and obj.animation_data and obj.animation_data.action:
-        for bone in obj.pose.bones:
-            if not bone.bone.hide:  # Check if the bone is not hidden
-                for frame in frames:
-                    insert_keyframe_for_bone(bone, frame, key_types)
-    else:
-        # Handle non-armature objects
-        for frame in frames:
-            if key_types.get("loc", False):
-                obj.keyframe_insert(data_path="location", frame=frame)
-            if key_types.get("rot", False):
-                obj.keyframe_insert(data_path="rotation_euler", frame=frame)  # Adjust based on obj.rotation_mode
-            if key_types.get("scale", False):
-                obj.keyframe_insert(data_path="scale", frame=frame)
-
-    print("Keyframes inserted for frames:", frames)
-
-
 def select_corresponding_nla_track(self, context, obj):
     action_name = obj.animation_data.action.name
     for track in obj.animation_data.nla_tracks:
@@ -371,7 +284,8 @@ class AMP_OT_StartAnimKeyPoser(bpy.types.Operator):
 
         if not props.is_keyposer_active:
             # Activate KeyPoser
-            self.activate_keyposer(context, obj)
+            if self.activate_keyposer(context, obj) == {"CANCELLED"}:
+                return {"CANCELLED"}
         else:
             # Deactivate KeyPoser
             self.deactivate_keyposer(context, obj)
@@ -560,7 +474,7 @@ class AMP_OT_remove_nla_track(bpy.types.Operator):
         active_index = props.active_track_index
         obj = context.active_object
 
-        if +len(obj.animation_data.nla_tracks) == self.minimum_elements:
+        if len(obj.animation_data.nla_tracks) == self.minimum_elements:
             self.report({"WARNING"}, "A Minimum of two layers is needed.")
             return {"CANCELLED"}
 
@@ -871,20 +785,20 @@ def unregister_properties():
 
 def register():
     register_properties()
-    try:
-        for cls in classes:
+    for cls in classes:
+        try:
             bpy.utils.register_class(cls)
-    except:
-        utils.dutils.dprint(f"{cls} already registered, skipping...")
+        except Exception:
+            utils.dprint(f"{cls} already registered, skipping...")
 
 
 def unregister():
 
-    try:
-        for cls in reversed(classes):
+    for cls in reversed(classes):
+        try:
             bpy.utils.unregister_class(cls)
-    except:
-        utils.dutils.dprint(f"{cls} not found, skipping...")
+        except Exception:
+            utils.dprint(f"{cls} not found, skipping...")
     unregister_properties()
 
 

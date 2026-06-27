@@ -674,9 +674,7 @@ class AMP_OT_Autokeying(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        if bpy.app.version >= (3, 0, 0) and True:
-            cls.poll_message_set("")
-        return not False
+        return True
 
     def execute(self, context):
         if context.scene.tool_settings.use_keyframe_insert_auto:

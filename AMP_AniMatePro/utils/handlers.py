@@ -10,21 +10,30 @@ def amp_on_file_load(dummy):
 
 
 def delayed_icon_reload():
-    prefs = bpy.context.preferences.addons[base_package].preferences
-    unload_icons()
-    load_icons(["icons", prefs.icons_set])
-    print("Icons reloaded")
-    # Optionally, force UI redraw:
-    for screen in bpy.data.screens:
-        for area in screen.areas:
-            area.tag_redraw()
+    addon = bpy.context.preferences.addons.get(base_package)
+    if addon is None:
+        return None
+    prefs = addon.preferences
+    try:
+        unload_icons()
+        load_icons(["icons", prefs.icons_set])
+        print("Icons reloaded")
+        # Optionally, force UI redraw:
+        for screen in bpy.data.screens:
+            for area in screen.areas:
+                area.tag_redraw()
+    except Exception as e:
+        print(f"Icon reload failed: {e}")
     return None
 
 
 @bpy.app.handlers.persistent
 def amp_on_frame_change_post(dummy):
     screen = bpy.context.screen
-    prefs = bpy.context.preferences.addons[base_package].preferences
+    addon = bpy.context.preferences.addons.get(base_package)
+    if addon is None:
+        return
+    prefs = addon.preferences
     scene = bpy.context.scene
 
     # if scene.is_nla_tweakmode:
@@ -34,7 +43,7 @@ def amp_on_frame_change_post(dummy):
         return
 
     active_obj = bpy.context.active_object
-    if active_obj and not active_obj.animation_data.action:
+    if active_obj and (not active_obj.animation_data or not active_obj.animation_data.action):
         return
 
     if active_obj and active_obj.animation_data:

@@ -121,7 +121,7 @@ def create_path(context, fcurves):
         else:
             points[n].co.y = y.get(f)
 
-        if x.get(f) is None:
+        if z.get(f) is None:
             points[n].co.z = z["curve"].evaluate(f)
         else:
             points[n].co.z = z.get(f)
@@ -202,7 +202,8 @@ def duplicate(fcurve, selected_keys=True, before="NONE", after="NONE", lock=Fals
     """Duploicates an fcurve"""
 
     action = fcurve.id_data
-    index = len(all_fcurves(action))
+    fcurves = list(all_fcurves(action))
+    index = len(fcurves)
 
     if selected_keys:
         selected_keys = get_selected(fcurve)
@@ -296,7 +297,7 @@ def remove_clone(objects):
 
     for obj in objects:
         action = obj.animation_data.action
-        fcurves = all_fcurves(action)
+        fcurves = list(all_fcurves(action))
 
         amp = bpy.context.scene.amp_timeline_tools
         aclones = amp.clone_data.clones
@@ -321,19 +322,19 @@ def move_clone(objects):
         aclone_data = amp.clone_data
         aclones = aclone_data.clones
         move_factor = aclone_data.move_factor
-        fcurves = all_fcurves(action)
+        fcurves = list(all_fcurves(action))
         for aclone in aclones:
             clone = fcurves[aclone.fcurve.index]
             fcurve = fcurves[aclone.original_fcurve.index]
-            selected_keys = key.get_selected_index(fcurve)
-            key1, key2 = key.first_and_last_selected(fcurve, selected_keys)
+            selected_keys = utils.key.get_selected_index(fcurve)
+            key1, key2 = utils.key.first_and_last_selected(fcurve, selected_keys)
             amount = abs(key2.co.x - key1.co.x)
-            for key in clone.keyframe_points:
-                key.co.x = key.co.x + (amount * move_factor)
+            for kp in clone.keyframe_points:
+                kp.co.x = kp.co.x + (amount * move_factor)
 
             clone.update()
 
-            key.attach_selection_to_fcurve(fcurve, clone, is_gradual=False)
+            utils.key.attach_selection_to_fcurve(fcurve, clone, is_gradual=False)
 
             fcurve.update()
 
@@ -355,9 +356,11 @@ def valid_obj(context, obj, check_ui=True):
     if check_ui:
         visible = obj.visible_get()
 
-        if context.area.type != "VIEW_3D":
-            if not context.space_data.dopesheet.show_hidden and not visible:
-                return False
+        if context.area is not None and context.area.type != "VIEW_3D":
+            space_data = context.space_data
+            if space_data is not None and hasattr(space_data, "dopesheet"):
+                if not space_data.dopesheet.show_hidden and not visible:
+                    return False
 
     return True
 
@@ -582,7 +585,10 @@ def find_keyframes(context):
     else:
         # Handle the object/bone context
         if context.mode == "POSE":
-            armature = context.active_object if context.active_object.type == "ARMATURE" else None
+            active_object = context.active_object
+            armature = active_object if active_object is not None and active_object.type == "ARMATURE" else None
+            if armature is None:
+                return sorted(set(keyframes))
             # Ensure the armature has animation data and an action
             if armature.animation_data and armature.animation_data.action:
                 # Collect keyframes from selected bones in Pose Mode
@@ -626,7 +632,7 @@ def select_keyframe_in_editors(target_frame, context):
                     bpy.ops.graph.select_all(action="DESELECT")
                 except RuntimeError as e:
                     utils.dprint(e)
-            elif context.area.type == ("DOPESHEET_EDITOR" or "TIMELINE"):
+            elif context.area.type in {"DOPESHEET_EDITOR", "TIMELINE"}:
                 try:
                     bpy.ops.action.select_all(action="DESELECT")
                 except RuntimeError as e:
@@ -645,7 +651,7 @@ def select_keyframe_in_editors(target_frame, context):
 def deselect_all_keyframes_in_editors(context):
     areas = {"GRAPH_EDITOR", "DOPESHEET_EDITOR", "TIMELINE"}
 
-    if context.area.type not in areas:
+    if context.area is None or context.area.type not in areas:
         return
 
     if context.area.type == "GRAPH_EDITOR":
@@ -653,15 +659,21 @@ def deselect_all_keyframes_in_editors(context):
             bpy.ops.graph.select_all(action="DESELECT")
         except RuntimeError as e:
             utils.dprint(e)
-    elif context.area.type == ("DOPESHEET_EDITOR" or "TIMELINE"):
-        bpy.ops.action.select_all(action="DESELECT")
+    elif context.area.type in {"DOPESHEET_EDITOR", "TIMELINE"}:
+        try:
+            bpy.ops.action.select_all(action="DESELECT")
+        except RuntimeError as e:
+            utils.dprint(e)
 
     # Redraw the area to update the UI
     utils.refresh_ui(context)
 
 
 def has_selected_keyframes(context):
-    space_type = context.space_data.type
+    space_data = context.space_data
+    if space_data is None:
+        return False
+    space_type = space_data.type
     active_object = context.active_object
 
     if active_object is None:
@@ -687,10 +699,11 @@ def has_selected_keyframes(context):
 
         if is_grease_pencil_object(active_object):
             grease = context.grease_pencil
-            for layer in grease.layers:
-                for frame in layer.frames:
-                    if frame.select:
-                        return True
+            if grease is not None:
+                for layer in grease.layers:
+                    for frame in layer.frames:
+                        if frame.select:
+                            return True
 
         if hasattr(active_object.data, "materials") and active_object.data.materials:
             for material in active_object.data.materials:
@@ -720,9 +733,13 @@ def delete_keyframes(context, frames_to_delete):
     active_fcurves = context.selected_visible_fcurves
     if active_fcurves is not None:
         for fcurve in active_fcurves:
-            for keyframe in fcurve.keyframe_points:
-                if keyframe.co.x in frames_to_delete:
-                    fcurve.keyframe_points.remove(keyframe)
+            indices_to_remove = [
+                i for i, keyframe in enumerate(fcurve.keyframe_points)
+                if keyframe.co.x in frames_to_delete
+            ]
+            for i in sorted(indices_to_remove, reverse=True):
+                fcurve.keyframe_points.remove(fcurve.keyframe_points[i])
+            fcurve.update()
 
 
 def key_custom_properties(target, frame):
@@ -745,42 +762,6 @@ def key_custom_properties(target, frame):
                     target.keyframe_insert(data_path=f'["{prop}"]', frame=frame)
             except:
                 pass
-
-
-# def keyframe_targets(
-#     self,
-#     context,
-#     targets,
-#     frame,
-#     location=False,
-#     rotation=False,
-#     scale=False,
-#     custom=False,
-# ):
-#     for target in targets:
-#         transformations_keyed = location or rotation or scale
-
-#         if location:
-#             key_standard_properties(target, "location", frame)
-#         if rotation:
-#             key_standard_properties(
-#                 target,
-#                 (
-#                     "rotation_quaternion"
-#                     if getattr(target, "rotation_mode", "XYZ") == "QUATERNION"
-#                     else "rotation_euler"
-#                 ),
-#                 frame,
-#             )
-#         if scale:
-#             key_standard_properties(target, "scale", frame)
-
-#         # Key all available fcurves if none of the transformations are keyed
-#         if not transformations_keyed:
-#             key_available_fcurves(self, context, target, frame)
-
-#         if custom:
-#             key_custom_properties(target, frame)
 
 
 def keyframe_fcurves(
@@ -1147,7 +1128,7 @@ def is_fcurve_in_radians(fcurve):
     """Converts the value to degrees if the F-Curve represents rotation in radians."""
     data_path = fcurve.data_path
 
-    if ("rotation_euler" or "delta_rotation_euler") in data_path:
+    if "rotation_euler" in data_path or "delta_rotation_euler" in data_path:
         return True
 
     if any(key in data_path for key in ["location", "scale", "rotation_quaternion", "delta_rotation_quaternion"]):
@@ -1379,7 +1360,13 @@ def gather_fcurve_keyframes(scope: str, context) -> list:
     if scope == "SCENE":
         return [kf for fcu in scene_fcurves() for kf in fcu.keyframe_points]
     elif scope == "ACTION":
-        act = context.active_object.animation_data.action
+        act = (
+            context.active_object.animation_data.action
+            if context.active_object and context.active_object.animation_data
+            else None
+        )
+        if act is None:
+            return []
         return [kf for fcu in all_fcurves(act) for kf in fcu.keyframe_points]
     elif scope == "SELECTED_ELEMENTS":
         kf_list = []

@@ -64,10 +64,11 @@ def refresh_ui(self, context):
             area.tag_redraw()
 
 
-def validate_auto_save_path(self, context):
-    # Ensure the path ends with .json
-    if self.auto_save_path and not self.auto_save_path.lower().endswith(".json"):
-        self.auto_save_path += ".json"
+def normalize_auto_save_path(path):
+    # Ensure the path ends with .json (normalized at point of use)
+    if path and not path.lower().endswith(".json"):
+        path += ".json"
+    return path
 
 
 class ButtonItem(bpy.types.PropertyGroup):
@@ -143,6 +144,43 @@ class SectionItem(bpy.types.PropertyGroup):
                 setattr(self, key, value)
 
 
+# Transient / runtime-only preference properties that must NOT be serialized on
+# export and must be ignored on import (operator state, captured originals, etc.).
+_NON_SERIALIZED_PREFS = {
+    "auto_save_path",
+    "capturing_key",
+    "is_scrubbing",
+    "jump_already_made",
+    "animation_was_playing",
+    "initial_mouse_x",
+    "initial_frame",
+    "has_dragged",
+    "is_sensitivity_mode",
+    "current_mode",
+    "scrubbing_error",
+    "preview_range_set_scrub",
+    "preview_start_frame",
+    "is_mopaths_active",
+    "icons_loaded",
+    "refreshing_icons",
+    "cycle_fcurves_index",
+    "deselect_state_index",
+    "last_transform_type",
+    "solo_fcurve",
+    "frame_last_action",
+}
+
+
+def _is_serializable_pref(identifier):
+    if identifier.startswith("__") or identifier == "rna_type":
+        return False  # Skip internal Blender properties
+    if identifier.startswith("original_"):
+        return False  # Skip captured-original / transient theme state
+    if identifier in _NON_SERIALIZED_PREFS:
+        return False  # Skip operator / runtime flags
+    return True
+
+
 class AMP_Preferences(AddonPreferences):
     bl_idname = __package__
     # prefs = bpy.context.preferences.addons[base_package].preferences
@@ -152,8 +190,8 @@ class AMP_Preferences(AddonPreferences):
     def to_dict(self):
         pref_dict = {}
         for prop in self.bl_rna.properties:
-            if prop.identifier.startswith("__") or prop.identifier == "rna_type":
-                continue  # Skip internal Blender properties
+            if not _is_serializable_pref(prop.identifier):
+                continue  # Skip internal / transient / runtime properties
 
             value = getattr(self, prop.identifier)
             # print(
@@ -184,8 +222,8 @@ class AMP_Preferences(AddonPreferences):
 
     def from_dict(self, pref_dict):
         for prop in self.bl_rna.properties:
-            if prop.identifier.startswith("__") or prop.identifier == "rna_type":
-                continue  # Skip internal Blender properties
+            if not _is_serializable_pref(prop.identifier):
+                continue  # Skip internal / transient / runtime properties
 
             if prop.identifier not in pref_dict:
                 continue  # Skip missing properties
@@ -224,7 +262,6 @@ class AMP_Preferences(AddonPreferences):
         description="Path for auto-saving preferences",
         subtype="FILE_PATH",
         default="",
-        update=validate_auto_save_path,
     )
 
     # * ---------------------------------- * #
@@ -2050,6 +2087,8 @@ class AMP_OT_AutoSavePreferences(bpy.types.Operator):
             addon_dir = os.path.dirname(os.path.abspath(__file__))
             auto_save_path = os.path.join(addon_dir, "preferences_auto_save.json")
 
+        auto_save_path = normalize_auto_save_path(auto_save_path)
+
         return self.save_preferences(auto_save_path, prefs)
 
     def save_preferences(self, filepath, prefs):
@@ -2079,15 +2118,19 @@ def register():
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
-        except ValueError:
-            pass
+        except ValueError as e:
+            print(f"AMP_AniMatePro: could not register {cls.__name__}: {e}")
 
-    prefs = bpy.context.preferences.addons[base_package].preferences
-
-    if not prefs.auto_save_path:
-        addon_dir = os.path.dirname(os.path.abspath(__file__))
-        default_auto_save_path = os.path.join(addon_dir, "AMP_preferences.json")
-        prefs.auto_save_path = default_auto_save_path
+    try:
+        addon = bpy.context.preferences.addons.get(base_package)
+        if addon is not None:
+            prefs = addon.preferences
+            if not prefs.auto_save_path:
+                addon_dir = os.path.dirname(os.path.abspath(__file__))
+                default_auto_save_path = os.path.join(addon_dir, "AMP_preferences.json")
+                prefs.auto_save_path = default_auto_save_path
+    except Exception as e:
+        print(f"AMP_AniMatePro: could not set default auto_save_path during register: {e}")
 
 
 def unregister():

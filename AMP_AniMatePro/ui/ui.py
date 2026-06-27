@@ -5,18 +5,7 @@
 import bpy
 import bpy.utils.previews
 import os
-import gpu
 from bpy.app.handlers import persistent
-from ..anim_offset.ui import draw_anim_offset, draw_anim_offset_mask
-from ..anim_slicer.anim_slicer import AnimSlicerButton
-from ..markers_tools.markers import MarkersToolsButton
-from ..anim_poser.anim_poser import AnimPoserButtons
-from ..anim_sculpt.anim_sculpt import AnimSculptButton
-from ..anim_shifter.anim_shifter import AnimShifterButton
-from ..anim_curves.anim_curves import AnimCurvesButtons, AnimViewButtons
-from ..anim_looper.anim_looper import AnimLoopButton
-from ..anim_baker.anim_baker import AnimBakerButton
-from ..anim_curves.anim_curves import AMP_OT_isolate_selected_fcurves
 from .. import utils
 from ..utils.customIcons import get_icon
 
@@ -95,13 +84,13 @@ def amp_limits_interface(
 
     row_41FE4.separator(factor=2.0)
     row_41FE4.prop(
-        bpy.data.scenes["Scene"],
+        bpy.context.scene,
         "use_preview_range",
         text="",
         icon_value=0,
         emboss=True,
     )
-    if bpy.data.scenes["Scene"].use_preview_range:
+    if bpy.context.scene.use_preview_range:
         row_AABA9 = row_41FE4.row(heading="", align=True)
         row_AABA9.alert = True
         row_AABA9.enabled = True
@@ -110,14 +99,14 @@ def amp_limits_interface(
         row_AABA9.use_property_decorate = False
 
         row_AABA9.prop(
-            bpy.data.scenes["Scene"],
+            bpy.context.scene,
             "frame_preview_start",
             text="Start",
             icon_value=0,
             emboss=True,
         )
         row_AABA9.prop(
-            bpy.data.scenes["Scene"],
+            bpy.context.scene,
             "frame_preview_end",
             text="End",
             icon_value=0,
@@ -132,13 +121,13 @@ def amp_limits_interface(
         row_92B93.use_property_decorate = False
 
         row_92B93.prop(
-            bpy.data.scenes["Scene"],
+            bpy.context.scene,
             "frame_start",
             text="Start",
             icon_value=0,
             emboss=True,
         )
-        row_92B93.prop(bpy.data.scenes["Scene"], "frame_end", text="End", icon_value=0, emboss=True)
+        row_92B93.prop(bpy.context.scene, "frame_end", text="End", icon_value=0, emboss=True)
 
 
 def amp_spacebaraction_interface(
@@ -834,85 +823,6 @@ class AMP_PT_AniMateProNLA(bpy.types.Panel):
         layout = self.layout
 
 
-from bl_ui.space_dopesheet import dopesheet_filter
-
-
-class GRAPH_HT_header(bpy.types.Header):
-    bl_space_type = "GRAPH_EDITOR"
-
-    def draw(self, context):
-        layout = self.layout
-        tool_settings = context.tool_settings
-
-        st = context.space_data
-
-        layout.template_header()
-
-        # Now a exposed as a sub-space type
-        # layout.prop(st, "mode", text="")
-
-        GRAPH_MT_editor_menus.draw_collapsible(context, layout)
-
-        row = layout.row(align=True)
-        row.prop(st, "use_normalization", icon="NORMALIZE_FCURVES", text="Normalize", toggle=True)
-        sub = row.row(align=True)
-        sub.active = st.use_normalization
-        sub.prop(st, "use_auto_normalization", icon="FILE_REFRESH", text="", toggle=True)
-
-        layout.separator_spacer()
-
-        dopesheet_filter(layout, context)
-
-        row = layout.row(align=True)
-        if st.has_ghost_curves:
-            row.operator("graph.ghost_curves_clear", text="", icon="X")
-        else:
-            row.operator("graph.ghost_curves_create", text="", icon="FCURVE_SNAPSHOT")
-
-        layout.popover(
-            panel="GRAPH_PT_filters",
-            text="",
-            icon="FILTER",
-        )
-
-        layout.prop(st, "pivot_point", icon_only=True)
-
-        row = layout.row(align=True)
-        row.prop(tool_settings, "use_snap_anim", text="")
-        sub = row.row(align=True)
-        sub.popover(
-            panel="GRAPH_PT_snapping",
-            text="",
-        )
-
-        row = layout.row(align=True)
-        row.prop(tool_settings, "use_proportional_fcurve", text="", icon_only=True)
-        sub = row.row(align=True)
-        sub.active = tool_settings.use_proportional_fcurve
-        sub.prop_with_popover(
-            tool_settings,
-            "proportional_edit_falloff",
-            text="",
-            icon_only=True,
-            panel="GRAPH_PT_proportional_edit",
-        )
-
-
-class GRAPH_MT_editor_menus(bpy.types.Menu):
-    bl_idname = "GRAPH_MT_editor_menus"
-    bl_label = ""
-
-    def draw(self, context):
-        st = context.space_data
-        layout = self.layout
-        layout.menu("GRAPH_MT_view")
-        layout.menu("GRAPH_MT_select")
-        if st.mode != "DRIVERS" and st.show_markers:
-            layout.menu("GRAPH_MT_marker")
-        layout.menu("GRAPH_MT_channel")
-        layout.menu("GRAPH_MT_key")
-
-
 classes = (
     AMP_PT_AniMateProGraph,
     AMP_PT_AniMateProDope,
@@ -932,9 +842,6 @@ classes = (
 
 
 def register():
-    global custom_icons
-    custom_icons = bpy.utils.previews.new()
-
     for cls in classes:
         # try:
         bpy.utils.register_class(cls)
@@ -943,9 +850,6 @@ def register():
 
 
 def unregister():
-    global custom_icons
-    bpy.utils.previews.remove(custom_icons)
-
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)

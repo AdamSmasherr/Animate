@@ -145,7 +145,8 @@ class AMP_OT_RemoveSteppedModifier(bpy.types.Operator):
         for obj in targets:
             self.remove_stepped_modifier(obj)
 
-        context.area.tag_redraw()
+        if context.area:
+            context.area.tag_redraw()
 
         return {"FINISHED"}
 
@@ -243,11 +244,11 @@ classes = (
 
 
 def register():
-    try:
-        for cls in classes:
+    for cls in classes:
+        try:
             bpy.utils.register_class(cls)
-    except:
-        utils.dprint(f"{cls} already registered, skipping...")
+        except Exception as e:
+            utils.dprint(f"{cls} already registered, skipping... ({e})")
 
     bpy.types.Scene.anim_stepper_props_old = bpy.props.PointerProperty(type=AnimStepperProperties)
 

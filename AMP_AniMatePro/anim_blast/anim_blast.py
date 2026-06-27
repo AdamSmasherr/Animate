@@ -31,7 +31,6 @@ def expand_filename_pattern(pattern):
     filename = pattern or "{blend_name}_playblast"
     filename = filename.replace("{blend_name}", _blend_name())
     filename = filename.replace("{timestamp}", _timestamp())
-    filename = filename.replace("{timestamp)", _timestamp())
     filename = _clean_filename(filename)
     base, ext = os.path.splitext(filename)
     if ext.lower() != ".mp4":

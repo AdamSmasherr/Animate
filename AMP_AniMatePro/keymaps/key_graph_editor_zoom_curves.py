@@ -52,7 +52,7 @@ keymaps_to_register = [
         "properties": {},
     },
     {
-        "name": "Graph Editor",
+        "name": "Dopesheet",
         "space_type": "DOPESHEET_EDITOR",
         "region_type": "WINDOW",
         "operator_idname": "anim.amp_zoom_frame_editors",
@@ -72,7 +72,7 @@ keymaps_to_register = [
         "properties": {"frame_range_smart_zoom": 0},
     },
     {
-        "name": "Graph Editor",
+        "name": "Dopesheet",
         "space_type": "DOPESHEET_EDITOR",
         "region_type": "WINDOW",
         "operator_idname": "anim.amp_smart_zoom_frame_editors",

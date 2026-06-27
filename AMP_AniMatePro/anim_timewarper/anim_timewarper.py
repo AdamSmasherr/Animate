@@ -230,6 +230,8 @@ class Pin:
 
         screen_x, screen_y = self.get_screen_position(context)
 
+        gpu.state.blend_set("ALPHA")
+
         # Draw vertical line spanning the viewport
         line_vertices = [(screen_x, 0), (screen_x, region_height)]
         batch_line = batch_for_shader(shader, "LINES", {"pos": line_vertices})
@@ -243,6 +245,8 @@ class Pin:
         shader.bind()
         shader.uniform_float("color", color)
         batch_circle.draw(shader)
+
+        gpu.state.blend_set("NONE")
 
         # **New Code: Draw Frame Number Centered in the Circle**
         frame_number = int(round(self.pin_data.position[0]))
@@ -387,7 +391,7 @@ class Easing:
             or not self.start_pin
             or not self.start_pin.pin_data
             or not self.easing_data
-            or not self.easing_data.percentage
+            or self.easing_data.percentage is None
             or not self.y_offset
         ):
             return float("inf"), float("inf")
@@ -776,9 +780,10 @@ Hold SHIFT to launch the TimeWarp options panel."""
 
     def update_keyframe_positions_proportionally(self, context, pins, easings):
         props = context.scene.timewarper_settings
-        action = context.active_object.animation_data.action
-        if not action:
+        obj = context.active_object
+        if obj is None or obj.animation_data is None or obj.animation_data.action is None:
             return
+        action = obj.animation_data.action
 
         sorted_pins = sorted(pins, key=lambda pin: pin.pin_data.position[0])
         if not sorted_pins:
@@ -1255,15 +1260,6 @@ Hold SHIFT to launch the TimeWarp options panel."""
         self.tw_push_undo()
 
         context.area.tag_redraw()
-
-    def get_pin_at_position(self, x, y, context):
-        for pin in self.pins:
-            screen_x, screen_y = graph_to_screen(context, pin.pin_data.position[0], 0)
-            screen_y = context.region.height - 25  # Fixed Y position
-            distance = math.hypot(x - screen_x, y - screen_y)
-            if distance <= pin.size / 2:
-                return pin
-        return None
 
     def get_element_at_position(self, x, y, context):
 
@@ -1809,12 +1805,11 @@ def register():
 
 
 def unregister():
-    for km, kmi in addon_keymaps:
-        km.keymap_items.remove(kmi)
-    addon_keymaps.clear()
-
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
+
+    if hasattr(bpy.types.Scene, "timewarper_settings"):
+        del bpy.types.Scene.timewarper_settings
 
 
 if __name__ == "__main__":

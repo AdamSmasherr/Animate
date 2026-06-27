@@ -232,13 +232,16 @@ class DOPESHEET_HT_editor_buttons:
     def _get_animated_id(context):
         st = context.space_data
         mode = getattr(st, "mode", "")
+        ob = context.object
+        if ob is None:
+            return None
         if mode == "ACTION":
-            return context.object
+            return ob
         elif mode == "SHAPEKEY":
-            return getattr(context.object.data, "shape_keys", None)
+            return getattr(ob.data, "shape_keys", None)
         else:
             print("Dope Sheet mode '{:s}' not expected to have an Action selector".format(mode))
-            return context.object
+            return ob
 
 
 amp_graph_classes = (
@@ -319,4 +322,25 @@ def register():
 
 
 def unregister():
-    pass
+    # Remove our custom headers and restore Blender's native headers.
+    for cls in amp_graph_classes:
+        try:
+            bpy.utils.unregister_class(cls)
+        except (RuntimeError, AttributeError):
+            pass
+    for cls in amp_dope_classes:
+        try:
+            bpy.utils.unregister_class(cls)
+        except (RuntimeError, AttributeError):
+            pass
+
+    for cls in bl_graph_classes:
+        try:
+            bpy.utils.register_class(cls)
+        except (RuntimeError, AttributeError, ValueError):
+            pass
+    for cls in bl_dope_classes:
+        try:
+            bpy.utils.register_class(cls)
+        except (RuntimeError, AttributeError, ValueError):
+            pass

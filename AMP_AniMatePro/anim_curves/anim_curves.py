@@ -209,15 +209,18 @@ class AMP_OT_cleanup_keyframes_from_locked_transforms(bpy.types.Operator):
             for index in reversed(keyframes_to_remove):
                 fcurve.keyframe_points.remove(fcurve.keyframe_points[index])
 
-    def cleanup_flat_fcurves(self, fcurves):
+            fcurve.update()
+
+    def cleanup_flat_fcurves(self, fcurves, action=None):
         """Remove F-Curves that are flat and do not contribute to the animation."""
         fcurves_to_remove = []
         for fcurve in fcurves:
             if all(keyframe.co[1] == fcurve.keyframe_points[0].co[1] for keyframe in fcurve.keyframe_points):
                 fcurves_to_remove.append(fcurve)
-        # Remove flat F-Curves
+        # Remove flat F-Curves from the owning action (layered-action safe)
         for fcurve in fcurves_to_remove:
-            fcurves.remove(fcurve)
+            if action is not None:
+                utils.curve.remove_fcurve_from_action(action, fcurve)
 
     def get_targets(self, context):
         targets = []
@@ -244,19 +247,22 @@ class AMP_OT_cleanup_keyframes_from_locked_transforms(bpy.types.Operator):
                     for fcurve in utils.curve.get_active_fcurves_obj(armature):
                         # Check if the fcurve belongs to the current bone
                         if fcurve.data_path.startswith(f'pose.bones["{bone.name}"]'):
-                            self.cleanup_action([fcurve])
+                            self.cleanup_action([fcurve], action)
         else:
             targets = self.get_targets(context)
             for obj in targets:
                 if obj.animation_data and obj.animation_data.action:
-                    self.cleanup_action(utils.curve.get_active_fcurves_obj(obj))
+                    self.cleanup_action(
+                        utils.curve.get_active_fcurves_obj(obj), obj.animation_data.action
+                    )
 
-    def cleanup_action(self, fcurves):
+    def cleanup_action(self, fcurves, action=None):
         """Apply cleanup operations to a single action."""
+        fcurves = list(fcurves)
         if self.delete_unchanged:
             self.delete_unchanged_keyframes(fcurves)
         if self.cleanup_keyframes:
-            self.cleanup_flat_fcurves(fcurves)
+            self.cleanup_flat_fcurves(fcurves, action)
 
 
 class AMP_OT_select_fcurves(bpy.types.Operator):
@@ -323,7 +329,7 @@ class AMP_OT_select_fcurves(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.space_data.type in {"GRAPH_EDITOR", "DOPESHEET_EDITOR"}
+        return context.space_data is not None and context.space_data.type in {"GRAPH_EDITOR", "DOPESHEET_EDITOR"}
 
     def invoke(self, context, event):
         self.ctrl_pressed = event.ctrl
@@ -611,6 +617,13 @@ class AMP_OT_insert_keyframe(bpy.types.Operator):
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
+    def cancel(self, context):
+        # Ensure no stray timer is left behind on any terminal/early path
+        if self._timer is not None:
+            context.window_manager.event_timer_remove(self._timer)
+            self._timer = None
+        self._timer_started = False
+
     def insert_keyframe_based_on_context(self, context):
         # Insert keyframe based on the current context and user preference
         prefs = bpy.context.preferences.addons[base_package].preferences
@@ -668,22 +681,24 @@ class AMP_OT_SetKeyframesValue(bpy.types.Operator):
         else:
             return 0.0
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None
+
     def execute(self, context):
         obj = context.active_object
-        action = obj.animation_data.action
-
-        if not action:
+        if obj is None or obj.animation_data is None or obj.animation_data.action is None:
             self.report({"WARNING"}, "No animation data found.")
             return {"CANCELLED"}
+        action = obj.animation_data.action
 
         for fcurve in context.selected_visible_fcurves:
-            if True:
-                default_value = self.get_default_value(fcurve)
-                for keyframe in fcurve.keyframe_points:
-                    if self.reset_to_default:
-                        keyframe.co[1] = default_value
-                    else:
-                        keyframe.co[1] = self.set_value
+            default_value = self.get_default_value(fcurve)
+            for keyframe in fcurve.keyframe_points:
+                if self.reset_to_default:
+                    keyframe.co[1] = default_value
+                else:
+                    keyframe.co[1] = self.set_value
 
             fcurve.update()
 
@@ -768,10 +783,18 @@ class AMP_OT_select_or_transform_keyframes(bpy.types.Operator):
 
     transform_type: bpy.props.StringProperty()  # 'MOVE', 'ROTATE', 'SCALE'
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None
+
     def execute(self, context):
         # Determine if any keyframes are already selected
         obj = context.active_object
+        if obj is None:
+            self.report({"WARNING"}, "No active object found.")
+            return {"CANCELLED"}
         already_selected = False
+        fcurves = []
         if obj.animation_data and obj.animation_data.action:
             fcurves = utils.curve.get_active_fcurves_obj(obj)
             for fcurve in fcurves:
@@ -1195,6 +1218,9 @@ class ANIM_OT_share_keyframes(bpy.types.Operator):
 
         elif mode == "POSE":
             obj = context.active_object
+            if obj is None:
+                self.report({"ERROR"}, "No active object found")
+                return {"CANCELLED"}
             if obj.type != "ARMATURE":
                 self.report({"ERROR"}, "Active object is not an armature")
                 return {"CANCELLED"}
@@ -1947,45 +1973,6 @@ class AMP_OT_SmartZoom(bpy.types.Operator):
             )
 
 
-# class AMP_OT_FrameEditors(bpy.types.Operator):
-#     bl_idname = "anim.amp_zoom_frame_editors"
-#     bl_label = "Frame sel/all Keyframes"
-#     bl_description = """Alternate between frame all and frame selected keyframes"""
-
-#     def execute(self, context):
-#         if context.area.type == "GRAPH_EDITOR":
-#             self.zoom_in_graph_editor(context)
-#         elif context.area.type == "DOPESHEET_EDITOR":
-#             self.zoom_in_dopesheet_editor(context)
-#         else:
-#             self.report({"WARNING"}, "Active editor does not support framing.")
-#             return {"CANCELLED"}
-#         return {"FINISHED"}
-
-#     def zoom_in_graph_editor(self, context):
-#         props = bpy.context.scene.timeline_scrub_settings
-
-#         if props.frame_last_action:
-#             bpy.ops.graph.view_selected()
-#             props.frame_last_action = False
-
-#         elif not props.frame_last_action:
-#             bpy.ops.graph.view_all()
-#             props.frame_last_action = True
-
-#     def zoom_in_dopesheet_editor(self, context):
-#         props = bpy.context.scene.timeline_scrub_settings
-
-#         if props.frame_last_action:
-#             bpy.ops.action.view_selected()
-#             props.frame_last_action = False
-
-#         elif not props.frame_last_action:
-
-#             bpy.ops.action.view_all()
-#             props.frame_last_action = True
-
-
 # * Individual operators for toggling visibility of fcurves
 
 
@@ -1995,16 +1982,20 @@ class AMP_OT_view_anim_curves_all(bpy.types.Operator):
     bl_description = "Toggle selection for all animation curves\nCTRL to Cyle\nALT to toggle selected"
 
     def invoke(self, context, event):
-        bpy.ops.anim.amp_toggle_fcurves_selection(
-            action_type="ALL",
-            extra_options="DESELECT_ALL",
-            isolate="ISOLATE",
-            transform_if_selected=False,
-            ctrl_pressed=event.ctrl,
-            shift_pressed=event.shift,
-            alt_pressed=event.alt,
-            os_key=event.oskey,
-        )
+        try:
+            bpy.ops.anim.amp_toggle_fcurves_selection(
+                action_type="ALL",
+                extra_options="DESELECT_ALL",
+                isolate="ISOLATE",
+                transform_if_selected=False,
+                ctrl_pressed=event.ctrl,
+                shift_pressed=event.shift,
+                alt_pressed=event.alt,
+                os_key=event.oskey,
+            )
+        except RuntimeError as e:
+            self.report({"WARNING"}, str(e))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -2016,16 +2007,20 @@ class AMP_OT_view_anim_curves_loc(bpy.types.Operator):
     )
 
     def invoke(self, context, event):
-        bpy.ops.anim.amp_toggle_fcurves_selection(
-            action_type="TRANSLATION",
-            extra_options="DESELECT_ALL",
-            isolate="ISOLATE",
-            transform_if_selected=False,
-            ctrl_pressed=event.ctrl,
-            shift_pressed=event.shift,
-            alt_pressed=event.alt,
-            os_key=event.oskey,
-        )
+        try:
+            bpy.ops.anim.amp_toggle_fcurves_selection(
+                action_type="TRANSLATION",
+                extra_options="DESELECT_ALL",
+                isolate="ISOLATE",
+                transform_if_selected=False,
+                ctrl_pressed=event.ctrl,
+                shift_pressed=event.shift,
+                alt_pressed=event.alt,
+                os_key=event.oskey,
+            )
+        except RuntimeError as e:
+            self.report({"WARNING"}, str(e))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -2037,16 +2032,20 @@ class AMP_OT_view_anim_curves_rot(bpy.types.Operator):
     )
 
     def invoke(self, context, event):
-        bpy.ops.anim.amp_toggle_fcurves_selection(
-            action_type="ROTATION",
-            extra_options="DESELECT_ALL",
-            isolate="ISOLATE",
-            transform_if_selected=False,
-            ctrl_pressed=event.ctrl,
-            shift_pressed=event.shift,
-            alt_pressed=event.alt,
-            os_key=event.oskey,
-        )
+        try:
+            bpy.ops.anim.amp_toggle_fcurves_selection(
+                action_type="ROTATION",
+                extra_options="DESELECT_ALL",
+                isolate="ISOLATE",
+                transform_if_selected=False,
+                ctrl_pressed=event.ctrl,
+                shift_pressed=event.shift,
+                alt_pressed=event.alt,
+                os_key=event.oskey,
+            )
+        except RuntimeError as e:
+            self.report({"WARNING"}, str(e))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -2058,16 +2057,20 @@ class AMP_OT_view_anim_curves_scale(bpy.types.Operator):
     )
 
     def invoke(self, context, event):
-        bpy.ops.anim.amp_toggle_fcurves_selection(
-            action_type="SCALE",
-            extra_options="DESELECT_ALL",
-            isolate="ISOLATE",
-            transform_if_selected=False,
-            ctrl_pressed=event.ctrl,
-            shift_pressed=event.shift,
-            alt_pressed=event.alt,
-            os_key=event.oskey,
-        )
+        try:
+            bpy.ops.anim.amp_toggle_fcurves_selection(
+                action_type="SCALE",
+                extra_options="DESELECT_ALL",
+                isolate="ISOLATE",
+                transform_if_selected=False,
+                ctrl_pressed=event.ctrl,
+                shift_pressed=event.shift,
+                alt_pressed=event.alt,
+                os_key=event.oskey,
+            )
+        except RuntimeError as e:
+            self.report({"WARNING"}, str(e))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -2077,16 +2080,20 @@ class AMP_OT_view_anim_curves_custom_props(bpy.types.Operator):
     bl_description = "Toggle selection for custom properties animation curves\nHold SHIFT to toggle all\nCTRL to Cyle\nALT to toggle selected"
 
     def invoke(self, context, event):
-        bpy.ops.anim.amp_toggle_fcurves_selection(
-            action_type="CUSTOMPROPS",
-            extra_options="DESELECT_ALL",
-            isolate="ISOLATE",
-            transform_if_selected=False,
-            ctrl_pressed=event.ctrl,
-            shift_pressed=event.shift,
-            alt_pressed=event.alt,
-            os_key=event.oskey,
-        )
+        try:
+            bpy.ops.anim.amp_toggle_fcurves_selection(
+                action_type="CUSTOMPROPS",
+                extra_options="DESELECT_ALL",
+                isolate="ISOLATE",
+                transform_if_selected=False,
+                ctrl_pressed=event.ctrl,
+                shift_pressed=event.shift,
+                alt_pressed=event.alt,
+                os_key=event.oskey,
+            )
+        except RuntimeError as e:
+            self.report({"WARNING"}, str(e))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -2098,16 +2105,20 @@ class AMP_OT_view_anim_curves_shapes(bpy.types.Operator):
     )
 
     def invoke(self, context, event):
-        bpy.ops.anim.amp_toggle_fcurves_selection(
-            action_type="SHAPES",
-            extra_options="DESELECT_ALL",
-            isolate="ISOLATE",
-            transform_if_selected=False,
-            ctrl_pressed=event.ctrl,
-            shift_pressed=event.shift,
-            alt_pressed=event.alt,
-            os_key=event.oskey,
-        )
+        try:
+            bpy.ops.anim.amp_toggle_fcurves_selection(
+                action_type="SHAPES",
+                extra_options="DESELECT_ALL",
+                isolate="ISOLATE",
+                transform_if_selected=False,
+                ctrl_pressed=event.ctrl,
+                shift_pressed=event.shift,
+                alt_pressed=event.alt,
+                os_key=event.oskey,
+            )
+        except RuntimeError as e:
+            self.report({"WARNING"}, str(e))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -2119,16 +2130,20 @@ class AMP_OT_view_anim_curves_constraints(bpy.types.Operator):
     )
 
     def invoke(self, context, event):
-        bpy.ops.anim.amp_toggle_fcurves_selection(
-            action_type="CONST",
-            extra_options="DESELECT_ALL",
-            isolate="ISOLATE",
-            transform_if_selected=False,
-            ctrl_pressed=event.ctrl,
-            shift_pressed=event.shift,
-            alt_pressed=event.alt,
-            os_key=event.oskey,
-        )
+        try:
+            bpy.ops.anim.amp_toggle_fcurves_selection(
+                action_type="CONST",
+                extra_options="DESELECT_ALL",
+                isolate="ISOLATE",
+                transform_if_selected=False,
+                ctrl_pressed=event.ctrl,
+                shift_pressed=event.shift,
+                alt_pressed=event.alt,
+                os_key=event.oskey,
+            )
+        except RuntimeError as e:
+            self.report({"WARNING"}, str(e))
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 

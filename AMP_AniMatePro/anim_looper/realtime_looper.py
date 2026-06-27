@@ -182,18 +182,35 @@ class AMP_OT_ToggleRealtimeLooperHandler(bpy.types.Operator):
                 bpy.context.scene.tool_settings.use_keyframe_cycle_aware = False
             except ValueError:
                 pass
+            _last_copied_values.clear()
             self.report({"INFO"}, "Realtime Looper Disabled")
         return {"FINISHED"}
 
 classes = (AMP_OT_ToggleRealtimeLooperHandler,)
 
+@persistent
+def _clear_looper_state_on_load(dummy):
+    global _last_copied_values
+    _last_copied_values.clear()
+
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.realtime_looper_handler_active = bpy.props.BoolProperty(default=False)
+    if _clear_looper_state_on_load not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_clear_looper_state_on_load)
 
 def unregister():
-    del bpy.types.Scene.realtime_looper_handler_active
+    global realtime_looper_handler_active, _looper_update_scheduled
+    if anim_looper_update_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(anim_looper_update_handler)
+    if _clear_looper_state_on_load in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_clear_looper_state_on_load)
+    realtime_looper_handler_active = False
+    _looper_update_scheduled = False
+    _last_copied_values.clear()
+    if hasattr(bpy.types.Scene, "realtime_looper_handler_active"):
+        del bpy.types.Scene.realtime_looper_handler_active
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 

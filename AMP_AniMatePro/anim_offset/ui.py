@@ -279,6 +279,7 @@ def draw_anim_offset_mask(layout, context):
             )
 
         scene = context.scene
+        mask_in_use = False
         if scene.amp_timeline_tools.anim_offset:
             anim_offset = scene.amp_timeline_tools.anim_offset
             mask_in_use = anim_offset.mask_in_use

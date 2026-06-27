@@ -77,44 +77,6 @@ Hold Shift while clicking to open the options panel."""
         slicer_column.prop(self, "add_on_slice")
         slicer_column.prop(self, "add_hold_keyframes")
 
-    def collect_material_fcurves(self, material, all_fcurves):
-        """Collect F-Curves from material and its node tree."""
-        if material.animation_data and material.animation_data.action:
-            all_fcurves.extend(utils.curve.all_fcurves(material.animation_data.action))
-
-        if material.node_tree and material.node_tree.animation_data and material.node_tree.animation_data.action:
-            action_fcurves = utils.curve.all_fcurves(material.node_tree.animation_data.action)
-            for fcurve in action_fcurves:
-                if "nodes[" in fcurve.data_path and ".inputs[" in fcurve.data_path:
-                    all_fcurves.append(fcurve)
-
-    def insert_hold_keyframe(self, fcurves):
-        """Insert a hold keyframe at the current frame for all F-Curves if not present."""
-        for fcurve in fcurves:
-            if not any(kp.co.x == self.current_frame for kp in fcurve.keyframe_points):
-                value = fcurve.evaluate(self.current_frame)
-                fcurve.keyframe_points.insert(self.current_frame, value, options={"FAST"})
-        for fcurve in fcurves:
-            fcurve.update()
-
-    def shift_keyframes_and_copy_value(self, fcurves, shift):
-        """Shift keyframes and optionally copy the current value to the target frame."""
-        for fcurve in fcurves:
-            current_value = fcurve.evaluate(self.current_frame)
-            target_frame = self.current_frame + shift
-
-            for keyframe in fcurve.keyframe_points:
-                if (shift > 0 and keyframe.co.x > self.current_frame) or (
-                    shift < 0 and keyframe.co.x < self.current_frame
-                ):
-                    keyframe.co.x += shift
-
-            if self.add_on_slice:
-                if not any(kp.co.x == target_frame for kp in fcurve.keyframe_points):
-                    fcurve.keyframe_points.insert(target_frame, current_value, options={"FAST"})
-
-            fcurve.update()
-
     def find_frame(self, layer, frame_number):
         """Find a Grease Pencil frame by its frame_number."""
         return utils.blender_compat.get_grease_pencil_frame(layer, frame_number)
@@ -232,8 +194,11 @@ Hold Shift while clicking to open the options panel."""
         gp_frames = utils.curve.gather_grease_pencil_frames(self.scope, context)
         target_frame = self.current_frame + self.shift_amount
 
+        modified_fcurves = set()
+
         for fcu in fcurves:
             current_value = fcu.evaluate(self.current_frame)
+            modified_fcurves.add(fcu)
 
             if self.add_hold_keyframes:
                 if not any(round(kp.co.x) == round(self.current_frame) for kp in fcu.keyframe_points):
@@ -249,9 +214,8 @@ Hold Shift while clicking to open the options panel."""
                 if not any(round(kp.co.x) == round(target_frame) for kp in fcu.keyframe_points):
                     fcu.keyframe_points.insert(target_frame, current_value, options={"FAST"})
 
-        if getattr(context, "editable_fcurves", None):
-            for fcurve in context.editable_fcurves:
-                fcurve.update()
+        for fcurve in modified_fcurves:
+            fcurve.update()
 
         if gp_frames:
             self.shift_gpencil_keyframes(gp_frames, self.shift_amount, context)

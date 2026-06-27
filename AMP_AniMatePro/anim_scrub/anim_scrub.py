@@ -143,7 +143,7 @@ def apply_frame_limits(context, proposed_frame):
     else:
         action = None
 
-    if action is not None and action.use_cyclic and (upper_limit - lower_limit) > 1:
+    if action is not None and getattr(action, "use_cyclic", False) and (upper_limit - lower_limit) > 1:
         range_size = upper_limit - lower_limit + 1
         new_frame = ((proposed_frame - lower_limit) % range_size) + lower_limit
 
@@ -235,11 +235,6 @@ class AMP_OT_scrub(bpy.types.Operator):
     )
     timeline_sensitivity: bpy.props.FloatProperty(default=0.1)
     is_cleaning_up: bpy.props.BoolProperty(default=False)
-
-    # Flags to indicate which operator to call next
-    call_breakdown = bpy.props.BoolProperty(default=False)
-    call_blend_to_neighbor = bpy.props.BoolProperty(default=False)
-    call_relax = bpy.props.BoolProperty(default=False)
 
     def __init__(self, *args, **kwargs):
         

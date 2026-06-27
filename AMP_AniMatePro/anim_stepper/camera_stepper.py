@@ -456,7 +456,7 @@ class AMP_OT_Disable(bpy.types.Operator):
 
                 # Identify the baked action to delete
                 action_suffix = "_baked_to_scene_camera"
-                if obj.animation_data.action is not None:
+                if obj.animation_data and obj.animation_data.action is not None:
                     baked_action = bpy.data.actions.get(obj.animation_data.action.name + action_suffix)
                     delete_action(baked_action)
 
@@ -528,7 +528,11 @@ class AMP_OT_AddBone(bpy.types.Operator):
     #         return {"CANCELLED"}
     def execute(self, context):
         # Fetch the selected TIMELINE_ObjectItem
-        obj_item = context.scene.TIMELINE_object_list[context.scene.TIMELINE_object_list_index]
+        obj_list = context.scene.TIMELINE_object_list
+        obj_index = context.scene.TIMELINE_object_list_index
+        if not (0 <= obj_index < len(obj_list)):
+            return {"CANCELLED"}
+        obj_item = obj_list[obj_index]
 
         armature = context.active_object
         if armature and armature.type == "ARMATURE" and context.mode == "POSE":
@@ -552,7 +556,11 @@ class AMP_OT_MoveBone(bpy.types.Operator):
     direction: bpy.props.EnumProperty(items=[("UP", "Up", ""), ("DOWN", "Down", "")])
 
     def execute(self, context):
-        obj_item = context.scene.TIMELINE_object_list[context.scene.TIMELINE_object_list_index]
+        obj_list = context.scene.TIMELINE_object_list
+        obj_index = context.scene.TIMELINE_object_list_index
+        if not (0 <= obj_index < len(obj_list)):
+            return {"CANCELLED"}
+        obj_item = obj_list[obj_index]
         bone_list = obj_item.bone_list
         index = obj_item.bone_list_index
         # bone_list = context.scene.TIMELINE_bone_list
@@ -578,7 +586,11 @@ class AMP_OT_RemoveBone(bpy.types.Operator):
     bl_label = "Remove Bone"
 
     def execute(self, context):
-        obj_item = context.scene.TIMELINE_object_list[context.scene.TIMELINE_object_list_index]
+        obj_list = context.scene.TIMELINE_object_list
+        obj_index = context.scene.TIMELINE_object_list_index
+        if not (0 <= obj_index < len(obj_list)):
+            return {"CANCELLED"}
+        obj_item = obj_list[obj_index]
         bone_list = obj_item.bone_list
         index = obj_item.bone_list_index
         # bone_list = context.scene.TIMELINE_bone_list
@@ -599,10 +611,15 @@ class AMP_OT_AddFrameRange(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.TIMELINE_object_list_index >= 0
+        index = context.scene.TIMELINE_object_list_index
+        return 0 <= index < len(context.scene.TIMELINE_object_list)
 
     def execute(self, context):
-        obj_item = context.scene.TIMELINE_object_list[context.scene.TIMELINE_object_list_index]
+        obj_list = context.scene.TIMELINE_object_list
+        index = context.scene.TIMELINE_object_list_index
+        if not (0 <= index < len(obj_list)):
+            return {"CANCELLED"}
+        obj_item = obj_list[index]
         add_item_to_list(obj_item.frame_ranges, TIMELINE_FrameRangesItem)
         return {"FINISHED"}
 
@@ -615,11 +632,18 @@ class AMP_OT_RemoveFrameRange(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        obj_item = context.scene.TIMELINE_object_list[context.scene.TIMELINE_object_list_index]
+        index = context.scene.TIMELINE_object_list_index
+        if not (0 <= index < len(context.scene.TIMELINE_object_list)):
+            return False
+        obj_item = context.scene.TIMELINE_object_list[index]
         return obj_item.frame_ranges_index >= 0
 
     def execute(self, context):
-        obj_item = context.scene.TIMELINE_object_list[context.scene.TIMELINE_object_list_index]
+        obj_list = context.scene.TIMELINE_object_list
+        index = context.scene.TIMELINE_object_list_index
+        if not (0 <= index < len(obj_list)):
+            return {"CANCELLED"}
+        obj_item = obj_list[index]
         remove_item_from_list(obj_item.frame_ranges, obj_item.frame_ranges_index)
         return {"FINISHED"}
 
@@ -994,8 +1018,6 @@ def unregister():
     del bpy.types.Armature.amp_camera_stepper_properties
 
     del bpy.types.Scene.frame_ranges
-
-    bpy.utils.unregister_class(TIMELINE_BakeToCameraProperties)
 
     for cls in reversed(classes):
         try:

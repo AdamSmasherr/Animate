@@ -1,6 +1,7 @@
 import bpy
 import time
 from bpy.types import Panel, Operator
+from bpy.props import EnumProperty
 
 from .. import utils
 from .. import __package__ as base_package
@@ -283,8 +284,9 @@ def deferred_amp_realtime_motion_paths_handler():
                 if not frame_changed and target:
 
                     changed_properties = get_changed_properties(current_transform_data, _last_transform_data)
-                    anim_offset = scene.amp_timeline_tools.anim_offset
-                    if changed_properties and not anim_offset.mask_in_use:
+                    amp_timeline_tools = getattr(scene, "amp_timeline_tools", None)
+                    anim_offset = getattr(amp_timeline_tools, "anim_offset", None)
+                    if changed_properties and anim_offset is not None and not anim_offset.mask_in_use:
 
                         insert_keyframes(context, changed_properties)
 
@@ -362,10 +364,6 @@ class AMP_OT_RealtimeMotionPaths(Operator):
                 pass
             _handlers_registered = False
         return {"CANCELLED"}
-
-
-import bpy
-from bpy.props import EnumProperty
 
 
 class AMP_OT_QuickMotionPaths(bpy.types.Operator):
@@ -565,13 +563,22 @@ def register():
 
 
 def unregister():
-    global _handlers_registered
+    global _handlers_registered, _update_scheduled, _mopaths_update_scheduled
     if _handlers_registered:
         try:
             bpy.app.handlers.depsgraph_update_post.remove(amp_realtime_motion_paths_handler)
         except ValueError:
             pass
         _handlers_registered = False
+
+    for timer_fn in (perform_motion_path_update, deferred_amp_realtime_motion_paths_handler):
+        try:
+            if bpy.app.timers.is_registered(timer_fn):
+                bpy.app.timers.unregister(timer_fn)
+        except Exception:
+            pass
+    _update_scheduled = False
+    _mopaths_update_scheduled = False
 
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

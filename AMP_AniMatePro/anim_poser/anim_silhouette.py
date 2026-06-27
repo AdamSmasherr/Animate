@@ -319,50 +319,6 @@ class AMP_OT_ToggleSilhouette(Operator):
 
 
 # ----------------------------------------------------
-# PANEL
-# ----------------------------------------------------
-
-
-class AMP_PT_AnimSilhouettePanel(Panel):
-    bl_idname = "AMP_PT_AnimSilhouettePanel"
-    bl_label = "Anim Silhouette"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Anim Tools"
-
-    def draw(self, context):
-        layout = self.layout
-        addon_prefs = context.preferences.addons[base_package].preferences
-        props = context.scene.amp_silhouette
-
-        box = layout.box()
-        box.label(text="Silhouette Colors:")
-        box.prop(addon_prefs, "poser_background_color", text="Background")
-        box.prop(addon_prefs, "poser_foreground_color", text="Foreground")
-
-        layout.separator()
-        # Add a toggle button for the current viewport
-        shading_infos = context.scene.amp_silhouette.shading_infos
-        space = context.space_data
-        if space.type != "VIEW_3D":
-            layout.label(text="Not a 3D View")
-            return
-
-        space_id = str(space.as_pointer())  # Ensure consistency with operator
-        is_enabled = False
-        for info in shading_infos:
-            if info.space_id == space_id:
-                is_enabled = True
-                break
-
-        layout.operator(
-            "anim.amp_toggle_silhouette",
-            text="Disable Silhouette" if is_enabled else "Enable Silhouette",
-            **get_icon("AMP_silhouette_on" if is_enabled else "AMP_silhouette_off"),
-        )
-
-
-# ----------------------------------------------------
 # BUTTON IN HEADER
 # ----------------------------------------------------
 
@@ -408,7 +364,6 @@ classes = (
     AMP_SilhouetteShadingInfo,
     AMP_PG_AnimSilhouetteProps,
     AMP_OT_ToggleSilhouette,
-    # AMP_PT_AnimSilhouettePanel,
 )
 
 

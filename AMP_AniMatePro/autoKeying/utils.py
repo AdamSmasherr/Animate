@@ -24,7 +24,7 @@ def get_panel_dimensions(area):
 
     # Handle dimensions for different area types
     if area.type == "VIEW_3D":
-        n_panel_width = [region.width for region in area.regions if region.type == "UI"][0]
+        n_panel_width = next((region.width for region in area.regions if region.type == "UI"), 0)
         tool_settings_height = prefs.tool_settings_height if bpy.context.space_data.show_region_tool_header else 0
         if not prefs.include_n_panel_width:
             n_panel_width = prefs.n_panel_bar if area.spaces.active.show_region_ui else 0
@@ -33,126 +33,6 @@ def get_panel_dimensions(area):
         n_panel_width = 0  # You may want to adapt this value
 
     return n_panel_width, tool_settings_height
-
-
-# def draw_frame():
-#     prefs = bpy.context.preferences.addons[base_package].preferences
-#     auto_keying_on = bpy.context.scene.tool_settings.use_keyframe_insert_auto
-#     if not prefs.viewport_frame or not auto_keying_on:
-#         return
-
-#     context = bpy.context
-#     area = context.area
-#     region = context.region
-
-#     areas_to_draw = []
-#     if prefs.viewport_frame:
-#         areas_to_draw.append("VIEW_3D")
-#     if prefs.frame_dopesheet and auto_keying_on:
-#         areas_to_draw.append("DOPESHEET_EDITOR")
-#     if prefs.frame_grapheditor and auto_keying_on:
-#         areas_to_draw.append("GRAPH_EDITOR")
-#     if prefs.frame_nla and auto_keying_on:
-#         areas_to_draw.append("NLA_EDITOR")
-
-#     if area.type in areas_to_draw:
-#         if area.type in areas_to_draw and area == area:
-#             n_panel_width, tool_settings_height = get_panel_dimensions(area)
-#             region = next(region for region in area.regions if region.type == "WINDOW")
-#             width, height = region.width, region.height
-
-#             # Custom handling for Graph Editor and other editors
-#             if area.type in ["GRAPH_EDITOR", "DOPESHEET_EDITOR", "NLA_EDITOR"]:
-#                 offset = prefs.frame_offset_editors
-#                 frame_width = prefs.frame_width_editors
-#                 tool_settings_height = prefs.frame_top_offset_editors
-#                 n_panel_width = 0
-#             else:
-#                 offset = prefs.frame_offset
-#                 frame_width = prefs.frame_width
-
-#             vertices_outer = [
-#                 (offset, offset, 0.0),
-#                 (width - offset - n_panel_width, offset, 0.0),
-#                 (
-#                     width - offset - n_panel_width,
-#                     height - offset - tool_settings_height,
-#                     0.0,
-#                 ),
-#                 (offset, height - offset - tool_settings_height, 0.0),
-#             ]
-
-#             vertices_inner = [
-#                 (offset + frame_width, offset + frame_width, 0.0),
-#                 (
-#                     width - offset - n_panel_width - frame_width,
-#                     offset + frame_width,
-#                     0.0,
-#                 ),
-#                 (
-#                     width - offset - n_panel_width - frame_width,
-#                     height - offset - tool_settings_height - frame_width,
-#                     0.0,
-#                 ),
-#                 (
-#                     offset + frame_width,
-#                     height - offset - tool_settings_height - frame_width,
-#                     0.0,
-#                 ),
-#             ]
-
-#             vertices_viewport = [
-#                 (0, 0, 0.0),
-#                 (width, 0, 0.0),
-#                 (width, height, 0.0),
-#                 (0, height, 0.0),
-#             ]
-
-#             # Combine the vertices
-#             vertices = vertices_viewport + vertices_outer + vertices_inner
-
-#             # Indices for the inner frame
-#             indices_inner = [
-#                 (4, 5, 9),
-#                 (4, 9, 8),
-#                 (5, 6, 10),
-#                 (5, 10, 9),
-#                 (6, 7, 11),
-#                 (6, 11, 10),
-#                 (7, 4, 8),
-#                 (7, 8, 11),
-#             ]
-
-#             # Indices for the outer frame
-#             indices_outer = [
-#                 (0, 1, 5),
-#                 (0, 5, 4),
-#                 (1, 2, 6),
-#                 (1, 6, 5),
-#                 (2, 3, 7),
-#                 (2, 7, 6),
-#                 (3, 0, 4),
-#                 (3, 4, 7),
-#             ]
-
-#             shader = gpu.shader.from_builtin("UNIFORM_COLOR")
-#             # shader.bind()
-
-#             # Draw outer frame
-#             if prefs.frame_outter and area.type == "VIEW_3D":
-#                 shader.uniform_float("color", prefs.frame_outter_color)
-#                 batch = batch_for_shader(
-#                     shader, "TRIS", {"pos": vertices}, indices=indices_outer
-#                 )
-#                 batch.draw(shader)
-
-#             # Draw inner frame, only if frame_inner is True
-#             if prefs.frame_inner:  # Check the new property here
-#                 shader.uniform_float("color", prefs.frame_color)
-#                 batch = batch_for_shader(
-#                     shader, "TRIS", {"pos": vertices}, indices=indices_inner
-#                 )
-#                 batch.draw(shader)
 
 
 def generate_frame_vertices(offset, frame_width, width, height, tool_settings_height, n_panel_width):
@@ -382,9 +262,8 @@ def notify_func(*args):
 
         set_autokeying_theme_colors()
         # Logic to add handlers, ensuring not to duplicate existing ones
-        if "SpaceView3D" not in draw_handler_dict:
+        if draw_handler_text is None:
             draw_handler_text = bpy.types.SpaceView3D.draw_handler_add(draw_text, (), "WINDOW", "POST_PIXEL")
-            draw_handler_dict["SpaceView3D"] = draw_handler_text
 
     else:
         reset_autokeying_theme_colors()
@@ -392,9 +271,6 @@ def notify_func(*args):
         if draw_handler_text:
             bpy.types.SpaceView3D.draw_handler_remove(draw_handler_text, "WINDOW")
             draw_handler_text = None
-            # Remove from dict to ensure consistency
-            if "SpaceView3D" in draw_handler_dict:
-                del draw_handler_dict["SpaceView3D"]
 
     # Trigger redraw of all relevant areas
     for area in bpy.context.screen.areas:

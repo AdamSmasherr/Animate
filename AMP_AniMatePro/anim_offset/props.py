@@ -29,7 +29,9 @@ from .support import update_blend_range, update_mask_range
 def interpolation_update(self, context):
     blends_action = bpy.data.actions.get("amp_action")
     from .. import utils
-    blends_curves = list(utils.blender_compat.iter_action_fcurves(blends_action))
+    # include_all_slots=True so the blend curve is found on layered (4.4+/5.1)
+    # actions, where a slotless iter yields nothing.
+    blends_curves = list(utils.blender_compat.iter_action_fcurves(blends_action, include_all_slots=True))
     if blends_curves:
         keys = blends_curves[0].keyframe_points
         support.mask_interpolation(keys, context)

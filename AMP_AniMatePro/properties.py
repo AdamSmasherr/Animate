@@ -170,4 +170,3 @@ def register():
 # Unregister properties
 def unregister():
     unregister_class(TIMELINE_ScrubbingSettings)
-    del Scene.timeline_scrub_settings

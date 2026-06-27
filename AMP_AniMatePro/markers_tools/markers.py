@@ -155,7 +155,11 @@ class AMP_OT_MarkerTools(bpy.types.Operator):
         start, end = frame_range[0], frame_range[1]
         start = int(start)
         end = int(end)
-        fcurves = utils.curve.all_fcurves(context.active_object.animation_data.action)
+        obj = context.active_object
+        action = obj.animation_data.action if (obj and obj.animation_data) else None
+        if not action:
+            return
+        fcurves = utils.curve.all_fcurves(action)
 
         for fcurve in fcurves:
             for kf in fcurve.keyframe_points:
@@ -231,7 +235,7 @@ class AMP_PT_MarkersToolsOptions(bpy.types.Panel):
         operations_row = ui_column.row(align=True)
         draw_delete_all_markers(layout, context)
         operations_row.separator()
-        draw_markers_lock(props, operations_row, context)
+        draw_markers_lock(operations_row, context)
 
 
 def draw_delete_all_markers(layout, context, text="Delete All Markers"):
@@ -246,12 +250,12 @@ def draw_delete_all_markers(layout, context, text="Delete All Markers"):
 def draw_markers_lock(layout, context, text="Markers Options"):
     lock_row = layout.row(align=True)
     lock_row.prop(
-        bpy.data.scenes["Scene"].tool_settings,
+        context.scene.tool_settings,
         "lock_markers",
         text=text,
         icon_value=(
             utils.customIcons.get_icon_id("AMP_markers_lock")
-            if bpy.data.scenes["Scene"].tool_settings.lock_markers
+            if context.scene.tool_settings.lock_markers
             else utils.customIcons.get_icon_id("AMP_markers_unlock")
         ),
         # emboss=False,

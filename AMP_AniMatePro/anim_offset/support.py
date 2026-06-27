@@ -142,7 +142,7 @@ def magnet(context, obj, fcurve):
     changes_detected = False  # Flag to track if any changes were made
 
     blends_action = bpy.data.actions.get("amp_action")
-    blends_curves = list(utils.blender_compat.iter_action_fcurves(blends_action))
+    blends_curves = list(utils.curve.all_fcurves(blends_action))
 
     delta_y = get_delta(context, obj, fcurve)
 
@@ -174,8 +174,12 @@ def magnet(context, obj, fcurve):
 def get_delta(context, obj, fcurve):
     """Determine the transformation change by the user of the current object"""
     cur_frame = context.scene.frame_current
-    nla_frame = int(context.active_object.animation_data.nla_tweak_strip_time_to_scene(cur_frame))
-    nla_dif = nla_frame - cur_frame
+    anim = getattr(obj, "animation_data", None)
+    if anim is None:
+        nla_dif = 0
+    else:
+        nla_frame = int(anim.nla_tweak_strip_time_to_scene(cur_frame))
+        nla_dif = nla_frame - cur_frame
     curve_value = fcurve.evaluate(cur_frame - nla_dif)
 
     try:
@@ -219,7 +223,7 @@ def remove_mask(context):
 
     anim_offset = context.scene.amp_timeline_tools.anim_offset
     blends_action = bpy.data.actions.get("amp_action")
-    blends_curves = list(utils.blender_compat.iter_action_fcurves(blends_action))
+    blends_curves = list(utils.curve.all_fcurves(blends_action))
 
     if blends_curves and len(blends_curves) > 0:
         utils.blender_compat.remove_fcurve(blends_action, blends_curves[0])
@@ -240,7 +244,7 @@ def set_blend_values(context):
 
     scene = context.scene
     blends_action = bpy.data.actions.get("amp_action")
-    blends_curves = list(utils.blender_compat.iter_action_fcurves(blends_action))
+    blends_curves = list(utils.curve.all_fcurves(blends_action))
 
     if blends_curves:
         blend_curve = blends_curves[0]
@@ -378,15 +382,7 @@ def store_user_timeline_ranges(context):
 def poll(context):
     """Poll for all the anim_offset related operators"""
 
-    objects = context.selected_objects
-    area = context.area.type
-    return (
-        objects
-        is not None
-        # and area == "GRAPH_EDITOR"
-        # or area == "DOPESHEET_EDITOR"
-        # or area == "VIEW_3D"
-    )
+    return bool(context.selected_objects)
 
 
 def get_anim_offset_globals(context, obj):

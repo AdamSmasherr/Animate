@@ -43,7 +43,11 @@ class AMP_OT_anim_nudger(Operator):
 
         utils.dprint(f"[DEBUG] Executing AnimNudger: Direction={direction}, Frames={frames_to_nudge}")
 
-        editor_type = context.area.type
+        area = context.area
+        if area is None:
+            self.report({"INFO"}, "Can only Nudge in Graph Editor or Dope Sheet.")
+            return {"CANCELLED"}
+        editor_type = area.type
         if editor_type not in {"GRAPH_EDITOR", "DOPESHEET_EDITOR"}:
             self.report({"INFO"}, "Can only Nudge in Graph Editor or Dope Sheet.")
             return {"CANCELLED"}
@@ -358,41 +362,10 @@ class AMP_OT_anim_pusher(Operator):
             f.id_data.update_tag()
 
 
-class AnimNudger_PT_Panel(Panel):
-    bl_label = "AnimNudger"
-    bl_idname = "ANIMNUDGER_PT_panel"
-    bl_space_type = "GRAPH_EDITOR"
-    bl_region_type = "UI"
-    bl_category = "AnimNudger"
-
-    def draw(self, context):
-        layout = self.layout
-        settings = context.scene.anim_nudger_settings
-
-        row = layout.row(align=True)
-        row.operator(
-            "anim.timeline_anim_nudger", text="", **utils.customIcons.get_icon("AMP_anim_nudge_L")
-        ).direction = "LEFT"
-        row.operator(
-            "anim.timeline_anim_nudger", text="", **utils.customIcons.get_icon("AMP_anim_nudge_R")
-        ).direction = "RIGHT"
-        row = row.row(align=True)
-        row.prop(settings, "frames_to_nudge", text="Frames")
-
-        layout.separator()
-
-        row = layout.row(align=True)
-        row.operator("anim.anim_pusher", text="", **utils.customIcons.get_icon("AMP_inbetweener_ADD")).operation = "ADD"
-        row.operator("anim.anim_pusher", text="", **utils.customIcons.get_icon("AMP_inbetweener_REMOVE")).operation = (
-            "REMOVE"
-        )
-
-
 classes = (
     AnimNudgerSettings,
     AMP_OT_anim_nudger,
     AMP_OT_anim_pusher,
-    # AnimNudger_PT_Panel,
 )
 
 

@@ -72,6 +72,7 @@ def deferred_isolate_character_handler():
     _isolate_character_update_scheduled = False
     
     _is_mutating_internally = True
+    props = None
     try:
         props = bpy.context.scene.anim_poser_props
         current_mode = bpy.context.mode
@@ -84,7 +85,8 @@ def deferred_isolate_character_handler():
             props.previous_mode = current_mode
         bpy.context.evaluated_depsgraph_get().update()
     except Exception as e:
-        disable_isolate_character(bpy.context, props)
+        if props is not None:
+            disable_isolate_character(bpy.context, props)
         print(f"Error in isolate_character_handler: {e}")
     finally:
         _is_mutating_internally = False
@@ -99,130 +101,6 @@ def isolate_character_handler(scene, depsgraph):
     if not _isolate_character_update_scheduled:
         _isolate_character_update_scheduled = True
         bpy.app.timers.register(deferred_isolate_character_handler, first_interval=0.01)
-
-
-# Rename current functions by appending an underscore
-
-
-def enable_isolate_character_(context, props, enter_pose_mode=True):
-    scene = context.scene
-    addon_prefs = context.preferences.addons[base_package].preferences
-    view_layer = context.view_layer
-
-    # Safeguard: record only top-level (lvl 1) collection states if not already stored.
-    props.exclude_states.clear()
-    for collection in scene.collection.children:
-        # Only record state for top-level collections.
-        layer_collection = find_top_level_layer_collection(view_layer, collection.name)
-        if layer_collection:
-            state = props.exclude_states.add()
-            state.collection_name = collection.name
-            state.exclude = layer_collection.exclude
-
-    # Store and hide level 1 objects (objects directly linked to the scene collection)
-    props.hidden_object_states.clear()
-    for obj in scene.collection.objects:
-        state = props.hidden_object_states.add()
-        state.object_name = obj.name
-        state.hide_viewport = obj.hide_viewport
-        obj.hide_viewport = True
-
-    selected_armatures = [obj for obj in context.selected_objects if obj.type == "ARMATURE"]
-
-    if not selected_armatures and enter_pose_mode:
-        bpy.ops.object.mode_set(mode="OBJECT")
-        bpy.ops.object.mode_set(mode="POSE")
-        return
-
-    temp_collection_names = []
-    selectable_objects = set(bpy.context.selectable_objects)
-
-    for armature in selected_armatures:
-        temp_collection_name = f"{armature.name}_temp"
-        temp_collection = bpy.data.collections.get(temp_collection_name)
-        if not temp_collection:
-            temp_collection = bpy.data.collections.new(temp_collection_name)
-            scene.collection.children.link(temp_collection)
-
-        temp_collection_names.append(temp_collection_name)
-
-        if armature.name not in temp_collection.objects:
-            temp_collection.objects.link(armature)
-
-        for obj in bpy.data.objects:
-            if obj not in selectable_objects and addon_prefs.isoalte_char_limit_to_selectable:
-                continue
-
-            include_object = False
-
-            if addon_prefs.isoalte_char_include_armature:
-                for mod in obj.modifiers:
-                    if mod.type == "ARMATURE" and mod.object == armature:
-                        include_object = True
-                        break
-
-            if not include_object and addon_prefs.isoalte_char_include_modifiers:
-                for mod in obj.modifiers:
-                    if mod.type != "ARMATURE" and hasattr(mod, "object") and mod.object == armature:
-                        include_object = True
-                        break
-
-            if not include_object and addon_prefs.isoalte_char_include_constraints:
-                for con in obj.constraints:
-                    if con.type in {"CHILD_OF", "COPY_TRANSFORMS", "ARMATURE"} and con.target == armature:
-                        include_object = True
-                        break
-
-            if include_object and addon_prefs.isolate_char_include_children:
-                for child in obj.children:
-                    if child not in selectable_objects and addon_prefs.isoalte_char_limit_to_selectable:
-                        continue
-                    if child.name not in temp_collection.objects:
-                        temp_collection.objects.link(child)
-
-            if include_object:
-                if obj.name not in temp_collection.objects:
-                    temp_collection.objects.link(obj)
-
-    for collection in scene.collection.children:
-        if collection.name not in temp_collection_names:
-            layer_collection = find_top_level_layer_collection(view_layer, collection.name)
-            if layer_collection:
-                layer_collection.exclude = True
-
-
-def disable_isolate_character_(context, props):
-    scene = context.scene
-    view_layer = context.view_layer
-
-    # Safeguard: if no stored states, assume already restored, so do nothing.
-    if not props.exclude_states:
-        return
-
-    for state in props.exclude_states:
-        try:
-            layer_collection = find_top_level_layer_collection(view_layer, state.collection_name)
-            if layer_collection:
-                layer_collection.exclude = state.exclude
-        except Exception:
-            # Continue restoring remaining states even if one fails
-            pass
-    props.exclude_states.clear()
-
-    # Restore the hide_viewport state for level 1 objects
-    for obj_state in props.hidden_object_states:
-        obj = bpy.data.objects.get(obj_state.object_name)
-        if obj:
-            obj.hide_viewport = obj_state.hide_viewport
-    props.hidden_object_states.clear()
-
-    temp_collections = [col for col in scene.collection.children if col.name.endswith("_temp")]
-    for temp_col in temp_collections:
-        try:
-            scene.collection.children.unlink(temp_col)
-            bpy.data.collections.remove(temp_col)
-        except Exception as e:
-            pass
 
 
 # New implementation using view layers and an isolation collection
@@ -254,7 +132,9 @@ def enable_isolate_character(context, props, enter_pose_mode=True):
         bpy.ops.object.mode_set(mode="POSE")
         return
 
+    active_armature = None
     for armature in selected_armatures:
+        active_armature = armature
         if armature.name not in isolation_coll.objects:
             isolation_coll.objects.link(armature)
         for obj in bpy.data.objects:
@@ -294,8 +174,10 @@ def enable_isolate_character(context, props, enter_pose_mode=True):
         bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
 
     #make armature active object
-    context.view_layer.objects.active = armature  
-    bpy.ops.object.mode_set(mode="POSE")
+    if active_armature is not None:
+        context.view_layer.objects.active = active_armature
+    if enter_pose_mode:
+        bpy.ops.object.mode_set(mode="POSE")
 
 
 def disable_isolate_character(context, props):
@@ -326,17 +208,6 @@ def disable_isolate_character(context, props):
 # ---------------------------
 # Helper Functions
 # ---------------------------
-
-
-def find_layer_collection(layer_collection, name):
-    """Recursively find a layer collection by name."""
-    if layer_collection.name == name:
-        return layer_collection
-    for child in layer_collection.children:
-        found = find_layer_collection(child, name)
-        if found:
-            return found
-    return None
 
 
 def find_top_level_layer_collection(view_layer, name):
@@ -500,7 +371,8 @@ How to Use (in Pose Mode):
                     bone.keyframe_insert(data_path="rotation_euler")
                     bone.keyframe_insert(data_path="scale")
 
-        context.area.tag_redraw()
+        if context.area:
+            context.area.tag_redraw()
 
         return {"FINISHED"}
 
@@ -571,6 +443,13 @@ def register():
 
 
 def unregister():
+    global _isolate_character_update_scheduled, _is_mutating_internally
+    if isolate_character_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(isolate_character_handler)
+    if bpy.app.timers.is_registered(deferred_isolate_character_handler):
+        bpy.app.timers.unregister(deferred_isolate_character_handler)
+    _isolate_character_update_scheduled = False
+    _is_mutating_internally = False
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.anim_poser_props

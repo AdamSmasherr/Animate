@@ -66,10 +66,14 @@ This can cause keyframes to be shifted by a frame creating curvature distortion.
     def execute(self, context):
         scale_factor = self.target_frame_rate / self.source_frame_rate
 
+        actions = set()
         for obj in context.selected_objects:
             # Handle object-level animation data (e.g., for mesh objects)
             if obj.animation_data and obj.animation_data.action:
-                retime_action(self, obj.animation_data.action, scale_factor)
+                actions.add(obj.animation_data.action)
+
+        for action in actions:
+            retime_action(self, action, scale_factor)
 
         # Redraw the area to reflect the changes
         for area in context.screen.areas:
@@ -81,20 +85,23 @@ This can cause keyframes to be shifted by a frame creating curvature distortion.
 
 def retime_action(self, action, scale_factor, specific_fcurve=None):
     """Apply retiming to an action or a specific F-Curve."""
-    fcurves = [specific_fcurve] if specific_fcurve else utils.curve.all_fcurves(action)
+    fcurves = [specific_fcurve] if specific_fcurve else list(utils.curve.all_fcurves(action))
 
+    original_frame = bpy.context.scene.frame_current
     bpy.context.scene.frame_set(bpy.context.scene.frame_start)
+
+    original_first_frames = {}
 
     for fcurve in fcurves:
         if fcurve:  # Check if fcurve is not None
 
             # Collect all keyframes in the fcurve
             keyframes = list(fcurve.keyframe_points)
-            
+
             # Sort keyframes by their original frame number
             keyframes.sort(key=lambda keyframe: keyframe.co.x)
 
-            original_first_frame = fcurve.keyframe_points[0].co.x if fcurve.keyframe_points else None
+            original_first_frames[fcurve] = fcurve.keyframe_points[0].co.x if fcurve.keyframe_points else None
 
             # Iterate through sorted keyframes for retiming
             for keyframe in keyframes:
@@ -137,7 +144,7 @@ def retime_action(self, action, scale_factor, specific_fcurve=None):
                 for keyframe in keyframes:
                     keyframe.co.x = round(keyframe.co.x)
 
-                utils.curve.correct_offset(fcurve, original_first_frame)
+                utils.curve.correct_offset(fcurve, original_first_frames.get(fcurve))
 
                 fcurve.update()
 
@@ -165,6 +172,8 @@ def retime_action(self, action, scale_factor, specific_fcurve=None):
 
     else:
         pass
+
+    bpy.context.scene.frame_set(original_frame)
 
 
 class AMP_PG_AnimRetimerProperties(bpy.types.PropertyGroup):

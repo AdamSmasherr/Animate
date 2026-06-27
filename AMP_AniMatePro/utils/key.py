@@ -203,7 +203,7 @@ def selected_bounding_box(context, objects, keys_selected=True):
                     right_neighbor_frame = right_limit
             else:
                 key_i = utils.key.on_current_frame(fcurve)
-                if key_i:
+                if key_i is not None:
                     lonely_cursor = False
                     first_frame = fcurve.keyframe_points[key_i].co.x
                     last_frame = fcurve.keyframe_points[key_i].co.x

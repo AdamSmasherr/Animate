@@ -2,7 +2,6 @@ import bpy
 import gpu
 import math
 from ... import utils
-from gpu_extras.presets import draw_circle_2d
 from gpu_extras.batch import batch_for_shader
 import blf
 
@@ -240,7 +239,8 @@ def initialize_keypose_markers(self, context, update=False):
     existing_selections = {m["frame"]: m["selected"] for m in self.keypose_markers} if update else {}
 
     self.keypose_markers.clear()
-    action = context.active_object.animation_data.action if context.active_object.animation_data else None
+    obj = context.active_object
+    action = obj.animation_data.action if (obj and obj.animation_data) else None
     if action:
         for fcurve in utils.curve.all_fcurves(action):
             for keyframe_point in fcurve.keyframe_points:
@@ -253,13 +253,11 @@ def initialize_keypose_markers(self, context, update=False):
 
 
 def update_keyframe_position(self, context, operator):
-    action = context.active_object.animation_data.action
+    obj = context.active_object
+    action = obj.animation_data.action if (obj and obj.animation_data) else None
     if action:
         needs_update = False
-        min_frame = float("inf")
-        max_frame = float("-inf")
 
-        needs_update = False
         # Iterate through all keypose markers
         for marker in operator.keypose_markers:
             if marker["selected"]:
@@ -282,12 +280,6 @@ def update_keyframe_position(self, context, operator):
                             break
                     if needs_update:
                         fcurve.update()  # Ensure to update fcurve if a change was made
-
-        # Update scene frame start and end if necessary
-        if min_frame != float("inf") and min_frame < context.scene.frame_start:
-            context.scene.frame_start = min_frame
-        if max_frame != float("-inf") and max_frame > context.scene.frame_end:
-            context.scene.frame_end = max_frame
 
         # If any updates were made, update the action to reflect changes
         if needs_update:

@@ -10,19 +10,6 @@ class ActionPickerPanelBase:
     bl_region_type = "UI"
     bl_category = "Action Extras"
 
-    @staticmethod
-    def _get_animated_id(context):
-        st = context.space_data
-        match st.mode:
-            case "ACTION":
-                return context.object
-            case "DOPESHEET":
-                return context.object
-            case "SHAPEKEY":
-                return getattr(context.object.data, "shape_keys", None)
-            case _:
-                return context.object
-
     @classmethod
     def _draw_action_selector(self, context, layout):
         if context.active_object is None:

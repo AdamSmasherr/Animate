@@ -602,7 +602,8 @@ def register():
 
     # register_properties()
 
-    init_sections_and_buttons(section_definitions)
+    # init_sections_and_buttons() is invoked once from the add-on's top-level
+    # register() in __init__.py; calling it here too would run it twice at startup.
 
     # bpy.types.GRAPH_MT_editor_menus.append(draw_graph_editor_top_bar)
     # bpy.types.DOPESHEET_MT_editor_menus.append(draw_dopesheet_top_bar)
@@ -613,8 +614,14 @@ def unregister():
         bpy.utils.unregister_class(cls)
     # unregister_properties()
 
-    bpy.types.GRAPH_MT_editor_menus.remove(draw_graph_editor_top_bar)
-    bpy.types.DOPESHEET_MT_editor_menus.remove(draw_dopesheet_top_bar)
+    try:
+        bpy.types.GRAPH_MT_editor_menus.remove(draw_graph_editor_top_bar)
+    except (ValueError, AttributeError):
+        pass
+    try:
+        bpy.types.DOPESHEET_MT_editor_menus.remove(draw_dopesheet_top_bar)
+    except (ValueError, AttributeError):
+        pass
 
 
 if __name__ == "__main__":
