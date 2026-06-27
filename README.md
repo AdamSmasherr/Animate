@@ -13,8 +13,9 @@ Graph Editor, Dope Sheet, Timeline and 3D Viewport.
 
 ![Onion Skin in the viewport](docs/images/onion_skin.png)
 
-> GPU onion skinning: ghosted copies of an animated mesh, past poses in red and
-> future poses in blue, with a distance based alpha falloff.
+> GPU onion skinning on a rigged character: red ghosts trace the descent into a
+> crouch, blue ghosts the held pose, with a distance based alpha falloff. Past
+> poses are red, future poses are blue.
 
 ---
 
@@ -37,8 +38,8 @@ compatibility and stability pass.
 
 ![Time Visualizer on the Dope Sheet](docs/images/time_visualizer.png)
 
-> Time Visualizer: checker bands and second lines drawn under the keyframes on
-> the Dope Sheet and Timeline.
+> Time Visualizer: checker bands and second lines drawn under the keyframes of a
+> full character action on the Dope Sheet and Timeline.
 
 ---
 
@@ -85,6 +86,28 @@ Full usage and per feature test steps are in [docs/FEATURES.md](docs/FEATURES.md
 
 ---
 
+## Tool reference
+
+Every tool in the add-on is documented in **[docs/TOOLS.md](docs/TOOLS.md)**:
+what each one does, where its button lives, and how to use it. The header
+toolbar in the Graph Editor and Dope Sheet groups them into categories:
+
+- **Tools**: Onion Skin, Anim Loop, Anim Sculpt, Anim Curves, TimeWarper, Anim
+  Shift, Scrubbing, Anim Lattice, Anim Slice, Anim Blast
+- **Keyframes**: Copy/Paste Pose, AnimOffset, Match Keyframes, Keyframer, Share
+  Keyframes, Nudge Keyframes, InBetweens
+- **Toggles**: Isolate Character, Realtime Looper, Flex Mopaths, Realtime
+  Mopaths, Silhouette
+- **Utils**: Euler Filter, Euler Gimbal, Smart Keyframes, Markers
+- **View**: Time Visualizer, Normalize, Smart Zoom, Frame, Solo
+- **Selection**: Selection Sets plus per channel selection by transform type
+- **Action**: quick switches that turn the active editor into each animation
+  editor
+
+The full reference covers all 56 tools.
+
+---
+
 ## Repository structure
 
 ```
@@ -93,6 +116,7 @@ AMP_AniMatePro/            the add-on (install this)
   anim_time_visualizer/    Time Visualizer tool
   ...                      every other AniMate tool
 docs/
+  TOOLS.md                 reference for all 56 tools
   AUDIT.md                 Blender 5.1 audit, 204 findings
   FEATURES.md              user docs for the two new tools
   TOOL_CONCEPTS.md         designs for two future flagship tools
@@ -122,6 +146,8 @@ python build.py
 
 ## Documentation
 
+- [docs/TOOLS.md](docs/TOOLS.md): reference for every tool in the add-on, what
+  it does and how to use it.
 - [docs/FEATURES.md](docs/FEATURES.md): Onion Skin and Time Visualizer usage,
   in Blender test steps and known limitations.
 - [docs/AUDIT.md](docs/AUDIT.md): the full Blender 5.1 audit, grouped by
