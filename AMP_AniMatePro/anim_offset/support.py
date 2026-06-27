@@ -53,24 +53,19 @@ def deferred_magnet_update():
 
         context = bpy.context
 
-        # Check if the current context is the Graph Editor
-        if context.area is None or context.area.type == "GRAPH_EDITOR":
-            # utils.dprint("Graph Editor")
-            return  # Do not run the function if in the Graph Editor or in headless context
+        # A bpy.app timer has no context.area, so a missing area must NOT be
+        # treated as "headless": doing that silently aborted every offset. Only
+        # bail when truly headless or while editing curves in the Graph Editor.
+        if bpy.app.background:
+            return
+        if context.area is not None and context.area.type == "GRAPH_EDITOR":
+            return
 
         external_op = context.active_operator
 
-        if context.scene.tool_settings.use_keyframe_insert_auto or (context.mode != "OBJECT" and context.mode != "POSE"):
-
-            utils.amp_draw_header_handler(action="REMOVE")
-            anim_offset = scene.amp_timeline_tools.anim_offset
-            if anim_offset.mask_in_use:
-                remove_mask(context)
-                reset_timeline_mask(context)
-
-            if magnet_handlers in bpy.app.handlers.depsgraph_update_post:
-                bpy.app.handlers.depsgraph_update_post.remove(magnet_handlers)
-            utils.remove_message()
+        # Only offset in Object or Pose mode. Do NOT disable the tool when
+        # autokeying is on: AnimOffset and autokeying are allowed to coexist.
+        if context.mode != "OBJECT" and context.mode != "POSE":
             return
 
         amp_timeline_tools = context.scene.amp_timeline_tools
@@ -449,6 +444,11 @@ def update_mask_range(self, context):
 
 
 def autokeying_changed_anim_offset(*args):
+    # AnimOffset and autokeying may coexist now, so toggling autokeying no longer
+    # tears AnimOffset down. Kept as a no-op so the msgbus subscription set up in
+    # this module's register stays valid.
+    return
+
     context = bpy.context
     scene = bpy.context.scene
     anim_offset = scene.amp_timeline_tools.anim_offset

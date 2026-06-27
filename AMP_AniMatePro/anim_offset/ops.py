@@ -59,7 +59,7 @@ class AMP_OT_activate_anim_offset(Operator):
         anim_offset.user_scene_auto = scene.tool_settings.use_keyframe_insert_auto
         support.store_user_timeline_ranges(context)
 
-        scene.tool_settings.use_keyframe_insert_auto = False
+        # AnimOffset no longer forces autokeying off; the two can coexist.
 
         if support.magnet_handlers not in bpy.app.handlers.depsgraph_update_post:
             bpy.app.handlers.depsgraph_update_post.append(support.magnet_handlers)
@@ -397,8 +397,6 @@ class AMP_OT_add_anim_offset_mask(Operator):
 
             scene.use_preview_range = True
             scene.frame_preview_start, scene.frame_preview_end = min_frame, max_frame
-
-        scene.tool_settings.use_keyframe_insert_auto = False
 
         support.add_blends()
 
