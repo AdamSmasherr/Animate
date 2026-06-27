@@ -27,6 +27,25 @@ def delayed_icon_reload():
     return None
 
 
+def _stop_playback_timer():
+    """Stop playback safely from a timer. Calling screen.animation_play() with a
+    bare timer context crashes Blender (no valid window/screen), so run it inside
+    a temp_override that supplies the playing window and screen."""
+    wm = bpy.context.window_manager
+    if wm is None:
+        return None
+    for win in wm.windows:
+        screen = win.screen
+        if screen is not None and screen.is_animation_playing:
+            try:
+                with bpy.context.temp_override(window=win, screen=screen):
+                    bpy.ops.screen.animation_play()
+            except Exception:
+                pass
+            break
+    return None
+
+
 @bpy.app.handlers.persistent
 def amp_on_frame_change_post(dummy):
     screen = bpy.context.screen
@@ -52,12 +71,8 @@ def amp_on_frame_change_post(dummy):
             return
 
     if prefs.playback_loop_only_if_cyclical:
-        def stop_playback():
-            if bpy.context.screen and bpy.context.screen.is_animation_playing:
-                bpy.ops.screen.animation_play()
-            return None
-        bpy.app.timers.register(stop_playback)
-        print("End of playback")
+        if not bpy.app.timers.is_registered(_stop_playback_timer):
+            bpy.app.timers.register(_stop_playback_timer)
 
 
 def register() -> None:
