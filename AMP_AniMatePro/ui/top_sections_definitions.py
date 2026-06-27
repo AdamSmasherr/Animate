@@ -15,6 +15,14 @@ section_definitions = [
         "sec_name": "Tools",
         "buttons": [
             {
+                "btn_name": "Onion Skin",
+                "btn_draw": btn.OnionSkinButton,
+                "btn_enabled_graph": True,
+                "btn_enabled_dope": True,
+                "btn_vis_graph": True,
+                "btn_vis_dope": True,
+            },
+            {
                 "btn_name": "Anim Loop",
                 "btn_draw": btn.AnimLoopButton,
                 "btn_enabled_graph": True,
@@ -266,6 +274,14 @@ section_definitions = [
     {
         "sec_name": "View",
         "buttons": [
+            {
+                "btn_name": "Time Visualizer",
+                "btn_draw": btn.TimeVisualizerButton,
+                "btn_enabled_graph": True,
+                "btn_enabled_dope": True,
+                "btn_vis_graph": True,
+                "btn_vis_dope": True,
+            },
             {
                 "btn_name": "Normalize",
                 "btn_draw": btn.NormalizeGraphButton,

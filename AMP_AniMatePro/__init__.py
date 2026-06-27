@@ -99,6 +99,8 @@ from . import (
     anim_experimental,
     register_keymaps,
     anim_overlap,
+    anim_time_visualizer,
+    anim_onionskin,
 )
 
 
@@ -135,6 +137,8 @@ addon_modules = [
     anim_nudger,
     anim_lattice,
     anim_poser,
+    anim_time_visualizer,
+    anim_onionskin,
     register_keymaps,
     blender_ui,
     # anim_overlap,

@@ -6,6 +6,11 @@ from ..utils.customIcons import get_icon
 from .. import __package__ as base_package
 from bpy.app.translations import contexts as i18n_contexts
 
+# Feature header buttons (defined in their own modules, re-exported here so the
+# section definitions can reference them as btn.<Name> like every other button).
+from ..anim_time_visualizer.anim_time_visualizer import TimeVisualizerButton
+from ..anim_onionskin.anim_onionskin import OnionSkinButton
+
 
 def AnimScrubButton(layout, context):
     if context.area.type in {"GRAPH_EDITOR", "DOPESHEET_EDITOR"}:
