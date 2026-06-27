@@ -11,11 +11,27 @@ Output: dist/AMP_AniMatePro_v1.<n>.zip
 """
 
 import os
+import re
 import subprocess
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON = "AMP_AniMatePro"
+
+
+def stamp_version(arc, text, ver):
+    """Stamp the release version into the manifest and bl_info so the installed
+    add-on reports it. ver is 'MAJOR.MINOR'; the semver third part is 0."""
+    maj, minor = ver.split(".")[0], ver.split(".")[1]
+    if arc.endswith("blender_manifest.toml"):
+        return re.sub(r'(?m)^version\s*=.*', f'version = "{ver}.0"', text)
+    if arc == ADDON + "/__init__.py":
+        return re.sub(
+            r'"version":\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)',
+            f'"version": ({maj}, {minor}, 0)',
+            text,
+        )
+    return text
 
 
 def version():
@@ -44,7 +60,11 @@ def build():
                     continue
                 full = os.path.join(dirpath, f)
                 arc = os.path.relpath(full, HERE).replace("\\", "/")
-                z.write(full, arc)
+                if f == "blender_manifest.toml" or arc == ADDON + "/__init__.py":
+                    text = open(full, encoding="utf-8").read()
+                    z.writestr(arc, stamp_version(arc, text, ver))
+                else:
+                    z.write(full, arc)
                 count += 1
 
     print(f"Built {zip_path} ({count} files)")

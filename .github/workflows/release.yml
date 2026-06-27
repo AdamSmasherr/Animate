@@ -33,10 +33,11 @@ jobs:
         id: build
         run: |
           set -euo pipefail
+          # build.py stamps the release version into the manifest and bl_info,
+          # then writes dist/AMP_AniMatePro_v<version>.zip.
+          python3 build.py
           NAME="AMP_AniMatePro_v${{ steps.ver.outputs.version }}"
-          mkdir -p dist
-          find AMP_AniMatePro -name '__pycache__' -type d -prune -exec rm -rf {} +
-          zip -r "dist/${NAME}.zip" AMP_AniMatePro -x '*.pyc' '*.pyo' >/dev/null
+          test -f "dist/${NAME}.zip"
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           echo "Built dist/${NAME}.zip"
 
