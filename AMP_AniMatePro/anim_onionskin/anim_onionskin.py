@@ -53,9 +53,10 @@ from ..utils import blender_compat
 # Module state
 # ----------------------------------------------------------------------------
 
-_geo_cache = {}            # target uid -> { frame:int -> [(x, y, z), ...] tri verts }
+_geo_cache = {}            # target uid -> { frame:int -> {"verts": numpy array, "batch": GPUBatch} }
 _draw_handle = None
 _uniform_shader = None
+_dither_shader = None
 _baking = False
 _timer_pending = False
 _in_front_original = {}    # mesh object name -> original show_in_front bool
@@ -68,6 +69,88 @@ def _get_uniform_shader():
     if _uniform_shader is None:
         _uniform_shader = gpu.shader.from_builtin("UNIFORM_COLOR")
     return _uniform_shader
+
+
+def _get_dither_shader():
+    global _dither_shader
+    if _dither_shader is None:
+        try:
+            import gpu
+            # Try Blender 4.0+ / 5.x API
+            info = gpu.types.GPUShaderCreateInfo()
+            info.vertex_in(0, 'VEC3', 'pos')
+            info.push_constant('MAT4', 'ModelViewProjectionMatrix')
+            info.push_constant('VEC4', 'color')
+            info.fragment_out(0, 'VEC4', 'fragColor')
+            info.depth_write('ANY')
+            
+            vertex_code = """
+            void main() {
+                gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+            }
+            """
+            
+            fragment_code = """
+            void main() {
+                int x = int(mod(gl_FragCoord.x, 4.0));
+                int y = int(mod(gl_FragCoord.y, 4.0));
+                
+                float bayer[16] = float[](
+                    0.0, 8.0, 2.0, 10.0,
+                    12.0, 4.0, 14.0, 6.0,
+                    3.0, 11.0, 1.0, 9.0,
+                    15.0, 7.0, 13.0, 5.0
+                );
+                
+                float threshold = (bayer[y * 4 + x] + 0.5) / 16.0;
+                if (color.a < threshold) {
+                    discard;
+                }
+                fragColor = color;
+            }
+            """
+            info.vertex_source(vertex_code)
+            info.fragment_source(fragment_code)
+            _dither_shader = gpu.shader.create_from_info(info)
+        except Exception as e:
+            print("Failed to compile Blender 4.0+ GLSL dither shader, trying Blender 3.x API:", e)
+            try:
+                # Try Blender 3.x API
+                vertex_code_3x = """
+                uniform mat4 ModelViewProjectionMatrix;
+                in vec3 pos;
+                void main() {
+                    gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+                }
+                """
+                fragment_code_3x = """
+                uniform vec4 color;
+                out vec4 fragColor;
+                void main() {
+                    int x = int(mod(gl_FragCoord.x, 4.0));
+                    int y = int(mod(gl_FragCoord.y, 4.0));
+                    
+                    float bayer[16] = float[](
+                        0.0, 8.0, 2.0, 10.0,
+                        12.0, 4.0, 14.0, 6.0,
+                        3.0, 11.0, 1.0, 9.0,
+                        15.0, 7.0, 13.0, 5.0
+                    );
+                    
+                    float threshold = (bayer[y * 4 + x] + 0.5) / 16.0;
+                    if (color.a < threshold) {
+                        discard;
+                    }
+                    fragColor = color;
+                }
+                """
+                _dither_shader = gpu.types.GPUShader(vertex_code_3x, fragment_code_3x)
+            except Exception as e2:
+                print("Failed to compile Blender 3.x GLSL dither shader, falling back to UNIFORM_COLOR:", e2)
+                _dither_shader = _get_uniform_shader()
+                
+    return _dither_shader
+
 
 
 def get_osk(scene):
@@ -144,7 +227,9 @@ def _selected_frames(scene, osk, target, cur):
             kfs = _keyframe_frames(obj)
             before = [f for f in kfs if f < cur]
             after = [f for f in kfs if f > cur]
-            out = before[-target.key_before:] + after[: target.key_after]
+            b_count = target.key_before
+            a_count = target.key_after
+            out = (before[-b_count:] if b_count > 0 else []) + (after[:a_count] if a_count > 0 else [])
 
     elif mode == "BEFORE_AFTER":
         out = [cur + int(it.offset) for it in target.ba_items if it.enabled]
@@ -191,8 +276,9 @@ def get_related_meshes(obj):
 
 def _bake_current(meshes, depsgraph):
     """Read evaluated world space triangle verts for meshes at the current
-    (already set) frame."""
-    tris = []
+    (already set) frame using optimized NumPy extraction."""
+    import numpy as np
+    all_tris = []
     for m in meshes:
         eval_obj = m.evaluated_get(depsgraph)
         me = None
@@ -204,20 +290,38 @@ def _bake_current(meshes, depsgraph):
             continue
         try:
             me.calc_loop_triangles()
+            num_loops = len(me.loop_triangles)
+            if num_loops == 0:
+                continue
+            
+            # Apply world transform at C-level
             mw = eval_obj.matrix_world
-            verts = me.vertices
-            for lt in me.loop_triangles:
-                for vi in lt.vertices:
-                    co = mw @ verts[vi].co
-                    tris.append((co.x, co.y, co.z))
-        except Exception:
-            pass
+            me.transform(mw)
+            
+            # Get vertices coordinates
+            num_verts = len(me.vertices)
+            verts_co = np.empty(num_verts * 3, dtype=np.float32)
+            me.vertices.foreach_get("co", verts_co)
+            verts_co.shape = (num_verts, 3)
+            
+            # Get loop triangle vertex indices
+            tri_loops = np.empty(num_loops * 3, dtype=np.int32)
+            me.loop_triangles.foreach_get("vertices", tri_loops)
+            
+            # Vectorized indexing to build triangle vertices
+            tri_verts = verts_co[tri_loops]
+            all_tris.append(tri_verts)
+        except Exception as e:
+            print("Error in NumPy vectorized geometry extraction:", e)
         finally:
             try:
                 eval_obj.to_mesh_clear()
             except Exception:
                 pass
-    return tris
+                
+    if all_tris:
+        return np.concatenate(all_tris, axis=0)
+    return np.empty((0, 3), dtype=np.float32)
 
 
 def _deferred_rebake():
@@ -263,18 +367,19 @@ def _deferred_rebake():
                 for uid, frames in work.items():
                     if f in frames:
                         target, meshes, _needed = plan[uid]
-                        _geo_cache.setdefault(uid, {})[f] = _bake_current(meshes, depsgraph)
+                        _geo_cache.setdefault(uid, {})[f] = {"verts": _bake_current(meshes, depsgraph), "batch": None}
             scene.frame_set(original_frame)
         finally:
             _baking = False
 
-    # Evict frames no longer needed.
+    # Evict frames furthest from the current frame when exceeding cache limit
     for uid, (_t, _m, needed) in plan.items():
         cache = _geo_cache.get(uid)
         if cache:
-            keep = set(needed)
-            for f in list(cache.keys()):
-                if f not in keep:
+            if len(cache) > MAX_BAKED_FRAMES:
+                sorted_frames = sorted(cache.keys(), key=lambda f: abs(f - cur))
+                # Delete frames that are furthest from current frame
+                for f in sorted_frames[MAX_BAKED_FRAMES:]:
                     del cache[f]
     # Drop caches for targets that vanished.
     valid = {t.uid for t in osk.targets}
@@ -316,10 +421,13 @@ def _alpha_for(rank, count, a_start, a_end):
 
 def _setup_gpu_state(render_mode):
     gpu.state.blend_set("ALPHA")
-    if render_mode in ("SOLID", "SOLID_DITHER"):
+    if render_mode in ("SOLID", "SOLID_DITHER", "XRAY_DITHER"):
         gpu.state.depth_test_set("LESS_EQUAL")
         gpu.state.depth_mask_set(True)
-        gpu.state.face_culling_set("BACK")
+        if render_mode in ("SOLID", "SOLID_DITHER"):
+            gpu.state.face_culling_set("BACK")
+        else:
+            gpu.state.face_culling_set("NONE")
     else:
         gpu.state.depth_test_set("NONE")
         gpu.state.depth_mask_set(False)
@@ -341,7 +449,6 @@ def _draw_onion():
         return
 
     cur = scene.frame_current
-    shader = _get_uniform_shader()
 
     for target in osk.targets:
         if not target.visible:
@@ -354,6 +461,12 @@ def _draw_onion():
         before = sorted([f for f in frames if f < cur], key=lambda f: cur - f)
         after = sorted([f for f in frames if f > cur], key=lambda f: f - cur)
 
+        # Determine shader based on render mode
+        if target.render_mode in ("XRAY_DITHER", "SOLID_DITHER"):
+            shader = _get_dither_shader()
+        else:
+            shader = _get_uniform_shader()
+
         _setup_gpu_state(target.render_mode)
         for side_frames, color, enabled in (
             (before, target.before_color, target.before_enabled),
@@ -363,16 +476,44 @@ def _draw_onion():
                 continue
             n = len(side_frames)
             for rank, f in enumerate(side_frames):
-                geo = cache.get(f)
-                if not geo:
+                entry = cache.get(f)
+                if not entry:
                     continue
+                verts = entry.get("verts")
+                if verts is None or len(verts) == 0:
+                    continue
+                
+                # Check if GPUBatch has been compiled and cached
+                batch = entry.get("batch")
+                if batch is None:
+                    try:
+                        batch = batch_for_shader(shader, "TRIS", {"pos": verts})
+                        entry["batch"] = batch
+                    except Exception as batch_err:
+                        print("Error creating batch for shader:", batch_err)
+                        continue
+                
                 a = _alpha_for(rank, n, target.alpha_start, target.alpha_end)
                 if a < 0.01:
                     continue
-                batch = batch_for_shader(shader, "TRIS", {"pos": geo})
-                shader.bind()
-                shader.uniform_float("color", (color[0], color[1], color[2], a))
-                batch.draw(shader)
+                
+                try:
+                    shader.bind()
+                    if target.render_mode in ("XRAY_DITHER", "SOLID_DITHER") and shader is not _get_uniform_shader():
+                        matrix = gpu.matrix.get_projection_matrix() @ gpu.matrix.get_model_view_matrix()
+                        shader.uniform_mat4("ModelViewProjectionMatrix", matrix)
+                    shader.uniform_float("color", (color[0], color[1], color[2], a))
+                    batch.draw(shader)
+                except Exception as draw_err:
+                    print("Error drawing batch with shader:", draw_err)
+                    # Try fallback to standard uniform shader
+                    try:
+                        fallback_shader = _get_uniform_shader()
+                        fallback_shader.bind()
+                        fallback_shader.uniform_float("color", (color[0], color[1], color[2], a))
+                        batch.draw(fallback_shader)
+                    except Exception as fallback_err:
+                        print("Fallback drawing failed:", fallback_err)
         _reset_gpu_state()
 
     _reset_gpu_state()
@@ -426,6 +567,14 @@ def _u_rebake_soft(self, context):
 
 def _u_mesh_in_front(self, context):
     _apply_mesh_in_front(self, self.mesh_in_front)
+    _tag_redraw_view3d()
+
+
+def _u_render_mode(self, context):
+    cache = _geo_cache.get(self.uid)
+    if cache:
+        for entry in cache.values():
+            entry["batch"] = None
     _tag_redraw_view3d()
 
 
@@ -493,7 +642,7 @@ class AMP_PG_OnionTarget(PropertyGroup):
     alpha_start: FloatProperty(name="Alpha Start", default=0.5, min=0.0, max=1.0, subtype="FACTOR", update=_u_redraw)
     alpha_end: FloatProperty(name="Alpha End", default=0.1, min=0.0, max=1.0, subtype="FACTOR", update=_u_redraw)
 
-    render_mode: EnumProperty(name="Render", items=RENDER_ITEMS, default="XRAY", update=_u_redraw)
+    render_mode: EnumProperty(name="Render", items=RENDER_ITEMS, default="XRAY", update=_u_render_mode)
     mesh_in_front: BoolProperty(name="Mesh In Front", default=False, update=_u_mesh_in_front)
 
 
@@ -987,7 +1136,7 @@ def register():
 
 
 def unregister():
-    global _draw_handle, _uniform_shader
+    global _draw_handle, _uniform_shader, _dither_shader
 
     for handler_list, fn in (
         (bpy.app.handlers.frame_change_post, _on_frame_change),
@@ -1005,8 +1154,16 @@ def unregister():
         _draw_handle = None
 
     _invalidate_all()
+    for name, val in _in_front_original.items():
+        obj = bpy.data.objects.get(name)
+        if obj is not None:
+            try:
+                obj.show_in_front = val
+            except Exception:
+                pass
     _in_front_original.clear()
     _uniform_shader = None
+    _dither_shader = None
 
     if hasattr(bpy.types.Scene, "amp_onion_skin"):
         del bpy.types.Scene.amp_onion_skin
