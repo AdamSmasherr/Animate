@@ -29,20 +29,27 @@ def delayed_icon_reload():
 
 def _stop_playback_timer():
     """Stop playback safely from a timer. Calling screen.animation_play() with a
-    bare timer context crashes Blender (no valid window/screen), so run it inside
-    a temp_override that supplies the playing window and screen."""
+    bare timer context crashes Blender, so run it inside a temp_override that
+    supplies a full window / screen / area / region context."""
     wm = bpy.context.window_manager
     if wm is None:
         return None
     for win in wm.windows:
         screen = win.screen
-        if screen is not None and screen.is_animation_playing:
-            try:
-                with bpy.context.temp_override(window=win, screen=screen):
-                    bpy.ops.screen.animation_play()
-            except Exception:
-                pass
-            break
+        if screen is None or not screen.is_animation_playing:
+            continue
+        area = next((a for a in screen.areas if a.type == "VIEW_3D"), None)
+        if area is None:
+            area = screen.areas[0] if screen.areas else None
+        region = None
+        if area is not None:
+            region = next((r for r in area.regions if r.type == "WINDOW"), None)
+        try:
+            with bpy.context.temp_override(window=win, screen=screen, area=area, region=region):
+                bpy.ops.screen.animation_play()
+        except Exception:
+            pass
+        return None
     return None
 
 
