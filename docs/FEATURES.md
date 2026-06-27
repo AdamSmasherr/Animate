@@ -88,8 +88,9 @@ Each target picks one of four modes from the mode dropdown.
 - **Alpha gradient**: Alpha Start is the opacity of the nearest skin, Alpha End
   the farthest, interpolated by distance. Skins under 1% alpha are skipped.
 - **Render modes**: X-Ray (see through), Solid (opaque, depth tested, back face
-  culled). The dither variants are present and currently render as their base
-  mode (see limitations).
+  culled), and X-Ray Dither / Solid Dither, which add a screen door (4x4 Bayer)
+  dither pattern rendered by a custom GLSL shader for a stippled transparency
+  look.
 - **Mesh In Front**: forces the related meshes to draw in front while active and
   restores their original state when disabled or removed.
 
@@ -128,9 +129,13 @@ the up / down arrows.
 7. Add a second object as another target and confirm independent settings.
 8. Toggle the top left eye to hide and show everything at once.
 
+### Performance
+The bake reads evaluated geometry with vectorised NumPy (foreach_get plus a
+C level world transform) and caches a compiled GPU batch per frame, so a heavy
+rig that used to draw at a few FPS now plays back smoothly. The cached batch is
+rebuilt only when the geometry or the render mode changes.
+
 ### Known limitations and future work
-- Screen door dithering shaders for the X-Ray Dither and Solid Dither modes are
-  not implemented yet; those modes currently fall back to their base render.
 - Per element configuration lists and per element vertex group filtering are
   not in this build; a target uses all related meshes.
 - Before / After uses frame stepping rather than the NLA strip duplication

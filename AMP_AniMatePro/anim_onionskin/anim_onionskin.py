@@ -501,7 +501,8 @@ def _draw_onion():
                     shader.bind()
                     if target.render_mode in ("XRAY_DITHER", "SOLID_DITHER") and shader is not _get_uniform_shader():
                         matrix = gpu.matrix.get_projection_matrix() @ gpu.matrix.get_model_view_matrix()
-                        shader.uniform_mat4("ModelViewProjectionMatrix", matrix)
+                        # GPUShader has no uniform_mat4; uniform_float sets a mat4 push constant.
+                        shader.uniform_float("ModelViewProjectionMatrix", matrix)
                     shader.uniform_float("color", (color[0], color[1], color[2], a))
                     batch.draw(shader)
                 except Exception as draw_err:
@@ -591,9 +592,9 @@ MODE_ITEMS = (
 
 RENDER_ITEMS = (
     ("XRAY", "X-Ray", "Semi transparent, see through"),
-    ("XRAY_DITHER", "X-Ray Dither", "X-Ray (dither approximated as X-Ray in this build)"),
+    ("XRAY_DITHER", "X-Ray Dither", "See through with a screen door dither pattern"),
     ("SOLID", "Solid", "Opaque with depth testing"),
-    ("SOLID_DITHER", "Solid Dither", "Solid with back face culling (dither approximated)"),
+    ("SOLID_DITHER", "Solid Dither", "Solid with back face culling and a screen door dither pattern"),
 )
 
 

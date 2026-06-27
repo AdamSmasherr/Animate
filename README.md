@@ -46,6 +46,12 @@ Jump to a category: [Flagship tools (new in this build)](#flagship-tools-new-in-
 
 <img src="docs/images/tool_onion_skin.png" alt="Onion Skin options" width="360">
 
+![Onion Skin Solid Dither](docs/images/onion_dither.png)
+
+> Solid Dither render mode: a screen door (4x4 Bayer) dither pattern via a custom
+> GLSL shader. The bake uses vectorised NumPy and cached GPU batches, so even a
+> heavy character rig stays interactive.
+
 **What it does:** It bakes evaluated world-space mesh geometry at selected frames by stepping the playhead, then draws those frames as colored translucent ghosts in the 3D viewport using a persistent GPU draw handler (the bake is deferred to a timer so it never runs inside the draw/frame-change callback). It works universally for armatures, meshes, and anything deformed by modifiers, constraints or drivers, and supports multiple independent targets, each with its own settings. Each target offers four frame-selection modes (Snapshots = manually placed frames, Frame Step = regular interval around the playhead, On Keyframes = the active bone/object's keys, Before/After = explicit per-item offsets) plus Before/After color coding with a distance-based alpha gradient, X-Ray vs Solid render modes, Mesh In Front, and a Limit to Range option. Baking auto-refreshes when the target's geometry or transform changes, and there is a manual Refresh as well (capped at 64 baked frames per target).
 
 **How to use:** In the Graph Editor or Dope Sheet header find the AniMatePro top bar 'Tools' section. The Onion Skin control is a two-part button: click the ghost icon (anim.amp_onionskin_toggle) to toggle all onion skins on/off, and click the small arrow next to it to open the settings popover. In the popover, select an object in the viewport and press the + (Add Onion Target) button, then pick a Mode from the dropdown; for Snapshots use Add to capture the current frame, for Before/After use Add to create offset items, for Frame Step/On Keyframes set the Before/After counts. Expand a target's gear (Drawing Settings) row to set Before/After colors and visibility, Alpha Start/End, the render mode (X-Ray / X-Ray Dither / Solid / Solid Dither), and Mesh In Front. The ghosts appear in the 3D viewport, not in the editor itself.

@@ -40,3 +40,6 @@ venv.bak/
 # Project specific
 *.zip
 *.log
+
+# Example asset, not redistributed
+docs/Rig1.blend
