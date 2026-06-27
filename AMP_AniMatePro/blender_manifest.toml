@@ -1,0 +1,22 @@
+schema_version = "1.0.0"
+
+id = "amp_timeline_tools"
+version = "0.26.0"
+name = "AniMate - AniMatePro"
+tagline = "Supercharge your Animation Workflow"
+maintainer = "not that NDA <nda@notthatnda.com>"
+website = "https://linktr.ee/notthatnda"
+warning = "Early Access"
+
+type = "add-on"
+
+tags = ["Animation"]
+
+blender_version_min = "4.1.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+copyright = ["2002-2024 Jose Ignacio (not that NDA) de Andres"]
+
+[permissions]
+files = "Access to filesystem"
