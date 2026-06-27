@@ -1,0 +1,57 @@
+name: Release Addon
+
+# Cuts a new GitHub Release on every push to main. The version is
+# 1.<commit count>, so each push produces a fresh, incrementing release with a
+# ready to install, version named zip of the addon attached. Releases are never
+# rebuilt in place: a new commit means a new version means a new release.
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: ver
+        run: echo "version=1.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build addon zip
+        id: build
+        run: |
+          set -euo pipefail
+          NAME="AMP_AniMatePro_v${{ steps.ver.outputs.version }}"
+          mkdir -p dist
+          find AMP_AniMatePro -name '__pycache__' -type d -prune -exec rm -rf {} +
+          zip -r "dist/${NAME}.zip" AMP_AniMatePro -x '*.pyc' '*.pyo' >/dev/null
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "Built dist/${NAME}.zip"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.ver.outputs.version }}
+          ZIP: dist/${{ steps.build.outputs.name }}.zip
+        run: |
+          set -euo pipefail
+          if gh release view "v${VER}" >/dev/null 2>&1; then
+            echo "Release v${VER} already exists, updating its asset."
+            gh release upload "v${VER}" "${ZIP}" --clobber
+          else
+            gh release create "v${VER}" "${ZIP}" \
+              --title "AMP_AniMatePro v${VER}" \
+              --generate-notes
+          fi
